@@ -14,8 +14,10 @@ enum Notifier {
         "com.vorssaint.notification.whatsapp-organizer"
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "vorssaint",
                                     category: "notifications")
+    private static var hasAppBundle: Bool { Bundle.main.bundleIdentifier != nil }
 
     static func requestPermission() {
+        guard hasAppBundle else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             // A denied prompt is the user's call; a request that ERRORS means
             // notifications silently cannot work at all — leave a trace so
@@ -37,6 +39,7 @@ enum Notifier {
                                          body: String,
                                          undoTitle: String,
                                          transactionID: UUID) {
+        guard hasAppBundle else { return }
         let center = UNUserNotificationCenter.current()
         let undo = UNNotificationAction(
             identifier: whatsAppOrganizerUndoActionIdentifier,
@@ -66,6 +69,11 @@ enum Notifier {
         func finish(accepted: Bool) {
             guard let completion else { return }
             DispatchQueue.main.async { completion(accepted) }
+        }
+
+        guard hasAppBundle else {
+            finish(accepted: false)
+            return
         }
 
         let center = UNUserNotificationCenter.current()

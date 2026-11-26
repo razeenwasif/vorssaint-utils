@@ -102,6 +102,7 @@ enum LaunchAtLogin {
     /// Redoes a registration the system lost and adopts an enable made in
     /// the system's own settings. Called once at startup.
     static func repairAtStartup() {
+        guard !BaryonHelperMode.isEnabled, Bundle.main.bundleIdentifier != nil else { return }
         operationQueue.async { repairNow() }
     }
 
