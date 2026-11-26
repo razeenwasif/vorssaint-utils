@@ -44,4 +44,48 @@ enum BaryonHelperMode {
     static var keptFeatures: [AppFeature] {
         AppFeature.allCases.filter { !prunedFeatures.contains($0) }
     }
+
+    private static let defaultsBootstrappedKey = "baryonHelperDefaultsBootstrappedV1"
+
+    static let defaultAvailableFeatures: [AppFeature] = [
+        .notch, .notchMascot, .notchCalendar, .notchAgents, .notchNotifications,
+        .notchGestures, .notchTimer, .notchLyrics, .notchLiveEqualizer,
+        .commandBar, .radialMenu, .shelf, .clipboardHistory, .scratchpad,
+        .screenshot, .screenOCR, .screenRecorder, .quickLauncher, .quickToggles,
+        .portManager, .killProcess, .mixer, .keepAwake,
+        .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork,
+        .monitorDisk, .monitorPower,
+    ]
+
+    static func bootstrapDefaultsIfNeeded(in defaults: UserDefaults = .standard) {
+        guard isEnabled, !defaults.bool(forKey: defaultsBootstrappedKey) else { return }
+
+        let prunedAvailabilityKeys = Set(prunedFeatures.map(\.availabilityKey))
+        for domain in ["com.vorssaint.utils.dev", "com.vorssaint.utils"] {
+            guard let legacy = UserDefaults(suiteName: domain)?.persistentDomain(forName: domain),
+                  !legacy.isEmpty else {
+                continue
+            }
+            for (key, value) in legacy {
+                if key == DefaultsKey.baryonUnifiedTray { continue }
+                if prunedAvailabilityKeys.contains(key) { continue }
+                defaults.set(value, forKey: key)
+            }
+            break
+        }
+
+        defaults.set(true, forKey: DefaultsKey.hasOnboarded)
+        for feature in defaultAvailableFeatures {
+            defaults.set(true, forKey: feature.availabilityKey)
+        }
+        for feature in prunedFeatures {
+            defaults.set(false, forKey: feature.availabilityKey)
+        }
+        defaults.set(true, forKey: DefaultsKey.notchEnabled)
+        defaults.set(true, forKey: DefaultsKey.notchMascotEnabled)
+        if defaults.string(forKey: DefaultsKey.notchMascotStyle) == nil {
+            defaults.set(NotchMascotStyle.fairy.rawValue, forKey: DefaultsKey.notchMascotStyle)
+        }
+        defaults.set(true, forKey: defaultsBootstrappedKey)
+    }
 }

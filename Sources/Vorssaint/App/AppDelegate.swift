@@ -98,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         // Shape a clean install before any feature can create a listener,
         // timer or shortcut. The onboarding can replace this set after the
         // person chooses what they actually want.
+        BaryonHelperMode.bootstrapDefaultsIfNeeded()
         FeaturePreset.prepareFirstRunAvailability(preserving: configuredFeatureKeys)
 
         // Redo a launch at login registration the system lost. The stored
