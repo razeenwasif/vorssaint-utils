@@ -151,7 +151,8 @@ final class NotchFairyDragController {
         defer { activeTracking = false }
 
         let anchorScreen = CGPoint(x: notchWindow.frame.midX, y: notchWindow.frame.minY + 14)
-        var lastPoint = NSEvent.mouseLocation
+        let startPoint = NSEvent.mouseLocation
+        var lastPoint = startPoint
         var lastTime = initialEvent.timestamp
         var vx: CGFloat = 0
         var vy: CGFloat = 0
@@ -188,11 +189,11 @@ final class NotchFairyDragController {
             lastPoint = pt
             lastTime = event.timestamp
 
+            let dragDown = max(0, startPoint.y - pt.y)
             let pullDown = max(0, anchorScreen.y - pt.y)
-            let totalPull = hypot(pt.x - anchorScreen.x, pt.y - anchorScreen.y)
 
             if event.type == .leftMouseDragged {
-                if !startedTether && (pullDown >= Self.startThreshold || totalPull >= Self.startThreshold + 4) {
+                if !startedTether && dragDown >= Self.startThreshold {
                     startedTether = true
                     self.showOverlay(anchorScreen: anchorScreen, pointerScreen: pt, pullDown: pullDown,
                                      detached: false, vx: vx, reduceMotion: reduceMotion)
