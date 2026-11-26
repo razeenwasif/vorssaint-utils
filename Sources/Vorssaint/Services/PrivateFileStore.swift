@@ -22,7 +22,7 @@ enum PrivateFileStore {
     static var containerURL: URL? {
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                                   in: .userDomainMask).first,
-              let bundleID = Bundle.main.bundleIdentifier
+              let bundleID = BaryonHelperMode.storageIdentifier
         else { return nil }
         return base.appendingPathComponent(bundleID, isDirectory: true)
     }

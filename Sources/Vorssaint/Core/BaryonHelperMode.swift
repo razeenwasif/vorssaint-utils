@@ -88,4 +88,55 @@ enum BaryonHelperMode {
         }
         defaults.set(true, forKey: defaultsBootstrappedKey)
     }
+
+    static var storageIdentifier: String? {
+        Bundle.main.bundleIdentifier ?? (isEnabled ? "baryon-vorssaint" : nil)
+    }
+
+    private static let privateStoreMigratedKey = "baryonHelperPrivateStoreMigratedV1"
+
+    static func migratePrivateStoreIfNeeded(in defaults: UserDefaults = .standard) {
+        guard isEnabled,
+              !defaults.bool(forKey: privateStoreMigratedKey),
+              let targetDir = PrivateFileStore.containerURL,
+              let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return }
+
+        let fm = FileManager.default
+        guard PrivateFileStore.createDirectory(at: targetDir) else { return }
+
+        let items = ["Scratchpad.json", "ClipboardHistory.json", "ClipboardImages", "agent-prices.json"]
+        if let legacyDir = ["com.vorssaint.utils.dev", "com.vorssaint.utils"]
+            .map({ appSupport.appendingPathComponent($0, isDirectory: true) })
+            .first(where: { dir in
+                fm.fileExists(atPath: dir.appendingPathComponent("Scratchpad.json").path)
+                    || fm.fileExists(atPath: dir.appendingPathComponent("ClipboardHistory.json").path)
+            }) {
+            for item in items {
+                let src = legacyDir.appendingPathComponent(item)
+                let dst = targetDir.appendingPathComponent(item)
+                guard fm.fileExists(atPath: src.path), !fm.fileExists(atPath: dst.path) else { continue }
+                try? fm.copyItem(at: src, to: dst)
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: dst.path, isDirectory: &isDir) {
+                    if isDir.boolValue {
+                        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dst.path)
+                        if let children = try? fm.subpathsOfDirectory(atPath: dst.path) {
+                            for rel in children {
+                                let childPath = dst.appendingPathComponent(rel).path
+                                var childIsDir: ObjCBool = false
+                                fm.fileExists(atPath: childPath, isDirectory: &childIsDir)
+                                try? fm.setAttributes([.posixPermissions: childIsDir.boolValue ? 0o700 : 0o600],
+                                                      ofItemAtPath: childPath)
+                            }
+                        }
+                    } else {
+                        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dst.path)
+                    }
+                }
+            }
+        }
+
+        defaults.set(true, forKey: privateStoreMigratedKey)
+    }
 }

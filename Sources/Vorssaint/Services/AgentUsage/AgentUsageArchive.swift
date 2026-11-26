@@ -42,7 +42,7 @@ enum AgentUsageArchive {
     /// and if macOS clears it the next launch reads the logs from their start.
     private static var folder: URL? {
         guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
-              let bundleID = Bundle.main.bundleIdentifier else { return nil }
+              let bundleID = BaryonHelperMode.storageIdentifier else { return nil }
         return caches.appendingPathComponent(bundleID, isDirectory: true)
             .appendingPathComponent("AgentUsage", isDirectory: true)
     }

@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         // timer or shortcut. The onboarding can replace this set after the
         // person chooses what they actually want.
         BaryonHelperMode.bootstrapDefaultsIfNeeded()
+        BaryonHelperMode.migratePrivateStoreIfNeeded()
         FeaturePreset.prepareFirstRunAvailability(preserving: configuredFeatureKeys)
 
         // Redo a launch at login registration the system lost. The stored

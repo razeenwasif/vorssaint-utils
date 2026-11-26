@@ -1179,7 +1179,7 @@ extension NSPasteboard {
     /// cleared, before or after the content: either way the mark joins the
     /// single item instead of adding one.
     func declareVorssaintSource() {
-        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        guard let bundleID = BaryonHelperMode.storageIdentifier else { return }
         setString(bundleID, forType: .source)
     }
 }

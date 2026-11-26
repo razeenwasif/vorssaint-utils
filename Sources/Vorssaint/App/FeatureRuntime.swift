@@ -208,7 +208,7 @@ final class FeatureRuntime: ObservableObject {
     }
 
     private func savedPreferences() -> [String: Any] {
-        guard let domain = Bundle.main.bundleIdentifier else { return [:] }
+        guard let domain = BaryonHelperMode.storageIdentifier else { return [:] }
         return UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
     }
 
