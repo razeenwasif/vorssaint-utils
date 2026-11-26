@@ -215,6 +215,13 @@ final class StatusItemController {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .baryonUnifiedTrayChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.scheduleSettingsSync()
+            }
+            .store(in: &cancellables)
+
         bindClipboardPreviewIfAvailable()
 
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
@@ -379,7 +386,9 @@ final class StatusItemController {
         // items, so hiding means the whole main item steps aside instead of
         // just its image (which is all that item has). With Dynamic Island
         // standing in, the item goes whenever it has no text of its own.
-        let mainItemHidden = (islandHides && button.attributedTitle.length == 0)
+        let unifiedTrayHides = defaults.bool(forKey: DefaultsKey.baryonUnifiedTray)
+        let mainItemHidden = unifiedTrayHides
+            || (islandHides && button.attributedTitle.length == 0)
             || MenuBarSpacingSupport.shouldHideMainStatusItem(
                 optionEnabled: optionEnabled,
                 separateMetrics: separateMetrics,
@@ -392,7 +401,7 @@ final class StatusItemController {
         // refresh() runs on every monitor tick and lands here; re-rendering
         // the same image every 2 seconds would be wasted composition, so the
         // image is only touched when some ingredient actually changed.
-        let stateKey = [String(hidden), String(mainItemHidden), String(updateAvailable),
+        let stateKey = [String(hidden), String(mainItemHidden), String(unifiedTrayHides), String(updateAvailable),
                         String(keepAwakeActive), KeepAwakeIconTint.current.rawValue,
                         KeepAwakeActiveIcon.current.rawValue, BlackHoleGlyph.chosenSymbolName,
                         String(micBadgeActive)].joined(separator: "|")

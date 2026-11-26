@@ -14,6 +14,7 @@ import SwiftUI
 struct NotchScratchpadView: View {
     @ObservedObject var service: NotchService
     @ObservedObject private var pad = ScratchpadService.shared
+    @ObservedObject private var notesSync = NotesSyncService.shared
     @ObservedObject private var l10n = L10n.shared
     @Environment(\.notchBand) private var band
     @State private var loadFailed = false
@@ -194,6 +195,10 @@ struct NotchScratchpadView: View {
                 copied = true
             }
             .disabled(pad.text.isEmpty)
+            NotchIconButton(symbol: "sparkles", title: "Ask Fairy about this note") {
+                _ = BaryonBridgeService.shared.sendContextAction(action: "ask", text: pad.text, source: "scratchpad")
+            }
+            .disabled(pad.text.isEmpty)
         }
     }
 
@@ -227,6 +232,20 @@ struct NotchScratchpadView: View {
                                from: window)
             },
             NotchMenuItem(title: text.clearAction, enabled: !pad.text.isEmpty) { pad.clear(through: editor.view) },
+            .separator,
+            NotchMenuItem(title: "Ask Fairy about note", enabled: !pad.text.isEmpty) {
+                _ = BaryonBridgeService.shared.sendContextAction(action: "ask", text: pad.text, source: "scratchpad")
+            },
+            NotchMenuItem(title: "Add to Baryon Notebook", enabled: !pad.text.isEmpty) {
+                _ = BaryonBridgeService.shared.sendContextAction(action: "notebook", text: pad.text, source: "scratchpad")
+            },
+            .separator,
+            NotchMenuItem(title: "Sync Hadron Notes now") {
+                pad.syncNotesNow()
+            },
+            NotchMenuItem(title: "Mirror to iCloud Drive", checked: notesSync.iCloudSyncEnabled) {
+                notesSync.iCloudSyncEnabled.toggle()
+            },
             .separator,
             NotchMenuItem(title: text.openButton) { service.perform { pad.show(allowsIsland: false) } }
         ]

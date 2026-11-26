@@ -84,6 +84,17 @@ final class NotchMascotRig: NSObject {
         }
         shine.fillColor = NotchMascotColor.shine.cgColor
         visor.fillColor = NotchMascotColor.visor.cgColor
+        baryonObserver = NotificationCenter.default.addObserver(forName: .baryonFairyStateChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.syncBaryonAppearance(animated: true)
+        }
+    }
+
+    private var baryonObserver: NSObjectProtocol?
+
+    deinit {
+        if let baryonObserver {
+            NotificationCenter.default.removeObserver(baryonObserver)
+        }
     }
 
     private static let noActions: [String: CAAction] = [
@@ -121,8 +132,16 @@ final class NotchMascotRig: NSObject {
         }
         root.contentsScale = scale
         let robot = look.style == .robot
+        let fairy = look.style == .fairy
         let palette = look.palette
-        fill.colors = [palette.light.cgColor, palette.shade.cgColor]
+        if fairy {
+            fill.colors = [
+                CGColor(srgbRed: 0.08, green: 0.11, blue: 0.24, alpha: 1),
+                CGColor(srgbRed: 0.02, green: 0.03, blue: 0.06, alpha: 1),
+            ]
+        } else {
+            fill.colors = [palette.light.cgColor, palette.shade.cgColor]
+        }
         fill.startPoint = CGPoint(x: 0.5, y: 0)
         fill.endPoint = CGPoint(x: 0.5, y: 1)
         if robot {
@@ -132,6 +151,10 @@ final class NotchMascotRig: NSObject {
             antenna.path = parts.antenna
             bulb.path = parts.bulb
             visor.path = parts.visor
+            visor.fillColor = NotchMascotColor.visor.cgColor
+            visor.strokeColor = nil
+            visor.lineWidth = 0
+            visor.shadowOpacity = 0
             ears.fillColor = palette.shade.cgColor
             antenna.fillColor = palette.shade.cgColor
             bulb.fillColor = (mood == .sleepy ? palette.shade : palette.light).cgColor
@@ -145,16 +168,37 @@ final class NotchMascotRig: NSObject {
                 eye.shadowRadius = max(0.6, size * 0.04)
                 eye.shadowOffset = .zero
             }
+        } else if fairy {
+            fillMask.path = NotchMascotGeometry.body(.ball, size: size)
+            let ringInset = size * 0.12
+            let ringRect = CGRect(x: ringInset, y: ringInset + size * 0.04, width: size - ringInset * 2, height: size - ringInset * 2)
+            visor.path = CGPath(ellipseIn: ringRect, transform: nil)
+            visor.fillColor = nil
+            visor.lineWidth = max(1.4, size * 0.075)
+            visor.shadowOffset = .zero
+            leftEye.fillColor = CGColor(srgbRed: 0.376, green: 0.647, blue: 0.980, alpha: 1)
+            leftEye.shadowColor = CGColor(srgbRed: 0.243, green: 0.353, blue: 0.925, alpha: 1)
+            leftEye.shadowOpacity = 0.95
+            leftEye.shadowRadius = max(1.2, size * 0.08)
+            leftEye.shadowOffset = .zero
+            rightEye.fillColor = CGColor(srgbRed: 0.92, green: 0.96, blue: 1.0, alpha: 0.85)
+            rightEye.shadowOpacity = 0
+            syncBaryonAppearance(animated: false)
         } else {
             fillMask.path = NotchMascotGeometry.body(look.shape, size: size)
+            visor.fillColor = NotchMascotColor.visor.cgColor
+            visor.strokeColor = nil
+            visor.lineWidth = 0
+            visor.shadowOpacity = 0
             for eye in [leftEye, rightEye] {
                 eye.fillColor = NotchMascotColor.ink.cgColor
                 eye.shadowOpacity = 0
             }
         }
-        for layer in [ears, antenna, bulb, visor] { layer.isHidden = !robot }
+        for layer in [ears, antenna, bulb] { layer.isHidden = !robot }
+        visor.isHidden = !(robot || fairy)
         shine.path = NotchMascotGeometry.shine(look.face, size: size)
-        shine.isHidden = robot
+        shine.isHidden = robot || fairy
         let face = look.face
         let side = size * 0.4
         leftEye.frame = CGRect(x: face.leftEye.x * size - side / 2, y: face.leftEye.y * size - side / 2, width: side, height: side)
@@ -199,7 +243,7 @@ final class NotchMascotRig: NSObject {
     private func apply(_ expression: NotchMascotExpression, animated: Bool) {
         guard size > 0 else { return }
         let left = eyePath(expression.left, right: false)
-        let right = eyePath(expression.right, right: true)
+        let right = look.style == .fairy ? CGPath(ellipseIn: CGRect(x: size * 0.16, y: size * 0.16, width: size * 0.07, height: size * 0.07), transform: nil) : eyePath(expression.right, right: true)
         let gaze = gazeTransform(expression.gaze)
         let tilt = CATransform3DMakeRotation(expression.tilt, 0, 0, 1)
         if animated {
@@ -402,6 +446,50 @@ final class NotchMascotRig: NSObject {
 
     /// The robot's antenna bulb goes dark while it sleeps and lights again as
     /// it wakes.
+    private func syncBaryonAppearance(animated: Bool) {
+        guard look.style == .fairy, size > 0 else { return }
+        let bridge = BaryonBridgeService.shared
+        let ringColor: CGColor
+        switch bridge.fairyState {
+        case "approval":
+            ringColor = CGColor(srgbRed: 0.984, green: 0.573, blue: 0.235, alpha: 1) // #fb923c amber
+        case "quiz":
+            ringColor = CGColor(srgbRed: 0.220, green: 0.741, blue: 0.973, alpha: 1) // #38bdf8 cyan
+        case "thinking", "working":
+            ringColor = CGColor(srgbRed: 0.478, green: 0.537, blue: 1.000, alpha: 1) // #7a89ff purple-blue
+        default:
+            ringColor = CGColor(srgbRed: 0.243, green: 0.353, blue: 0.925, alpha: 1) // #3e5aec fairy iris
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated || reduceMotion)
+        visor.strokeColor = ringColor
+        visor.shadowColor = ringColor
+        visor.shadowOpacity = 0.95
+        visor.shadowRadius = max(1.4, size * 0.11)
+        CATransaction.commit()
+
+        guard !reduceMotion else {
+            squasher.removeAnimation(forKey: "baryonPulse")
+            return
+        }
+        let activePulse = ["speaking", "listening", "thinking", "working", "approval"].contains(bridge.fairyState)
+        if activePulse {
+            if squasher.animation(forKey: "baryonPulse") == nil {
+                let amp: CGFloat = bridge.fairyState == "speaking" ? (1.03 + min(0.08, bridge.audioLevel * 0.08)) : 1.045
+                let pulse = CABasicAnimation(keyPath: "transform.scale")
+                pulse.fromValue = 1.0
+                pulse.toValue = amp
+                pulse.duration = bridge.fairyState == "speaking" ? 0.26 : 0.75
+                pulse.autoreverses = true
+                pulse.repeatCount = .infinity
+                pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                squasher.add(pulse, forKey: "baryonPulse")
+            }
+        } else {
+            squasher.removeAnimation(forKey: "baryonPulse")
+        }
+    }
+
     private func lightBulb(_ lit: Bool, animated: Bool) {
         guard look.style == .robot else { return }
         let color = (lit ? look.palette.light : look.palette.shade).cgColor

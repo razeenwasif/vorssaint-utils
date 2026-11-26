@@ -477,6 +477,8 @@ extension RadialMenuItem {
                 }
             case nil: return text.kindMedia
             }
+        case .fairy:
+            return fairyAction?.title ?? "Fairy"
         case .submenu:
             return text.kindSubmenu
         }

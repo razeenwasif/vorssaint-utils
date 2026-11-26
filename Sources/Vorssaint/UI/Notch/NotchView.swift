@@ -6,6 +6,7 @@ import SwiftUI
 
 struct NotchView: View {
     @ObservedObject var service: NotchService
+    @ObservedObject private var baryon = BaryonBridgeService.shared
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var music = NotchMusicService.shared
     @ObservedObject private var launcher = QuickLauncherService.shared
@@ -103,6 +104,18 @@ struct NotchView: View {
             } else {
                 expanded
             }
+        } else if baryon.dockHoverActive {
+            NotchFairyDockTargetView(proximity: baryon.dockHoverProximity, service: service)
+                .transition(.opacity)
+        } else if service.showingTipActions {
+            NotchFairyTipActionsView(service: service)
+                .transition(.opacity)
+        } else if let approval = baryon.pendingApproval {
+            NotchFairyApprovalView(approval: approval, service: service)
+                .transition(.opacity)
+        } else if let toast = baryon.toast, service.stripNotice == nil {
+            NotchFairyToastPill(toast: toast, service: service)
+                .transition(.opacity)
         } else if service.dragPlaceholder {
             Group {
                 if service.mascotOn {
@@ -494,6 +507,8 @@ struct NotchView: View {
         case .files:
             // One shelf tile and its vertical insets; the actions are in the top row.
             size.height = max(size.height, 88 + 8)
+        case .teleprompter, .aiLauncher, .relaySweep, .shortcuts, .tasks:
+            size.height = max(size.height, 210)
         default: break
         }
         return size
@@ -599,6 +614,11 @@ struct NotchView: View {
             case .scratchpad: NotchScratchpadView(service: service)
             case .agents: NotchAgentsView(size: pageSize)
             case .watch: NotchWatchView(size: pageSize)
+            case .teleprompter: NotchTeleprompterView(service: NotchTeleprompterService.shared, size: pageSize)
+            case .aiLauncher: NotchAILauncherView(service: AILauncherService.shared, notch: service, size: pageSize)
+            case .relaySweep: NotchRelaySweepView(size: pageSize)
+            case .shortcuts: NotchShortcutsView(service: service, size: pageSize)
+            case .tasks: NotchTasksView(size: pageSize)
             }
         }
     }
@@ -656,6 +676,7 @@ struct NotchRestingStrip: View {
     @ObservedObject var service: NotchService
     /// Another display's strip, when the island shows on every display.
     var displayGeometry: NotchGeometry? = nil
+    @ObservedObject private var baryon = BaryonBridgeService.shared
     @ObservedObject private var music = NotchMusicService.shared
     @AppStorage(DefaultsKey.notchLowBatteryTint) private var lowBatteryTint = false
     @AppStorage(DefaultsKey.notchLowBatteryThreshold) private var lowBatteryThreshold = NotchSupport.defaultLowBatteryThreshold
@@ -742,21 +763,39 @@ struct NotchRestingStrip: View {
                 } else { Color.clear }
             }
             if service.mascotShows(on: geometry) {
-                NotchMascotTrackView(look: NotchMascotSupport.look(),
-                                     track: NotchMascotSupport.track(stripWidth: geometry.collapsed.width,
-                                                                     stripHeight: geometry.stripHeight,
-                                                                     wing: geometry.restingWingWidth,
-                                                                     cameraWidth: geometry.cameraWidth, floats: false,
-                                                                     bodyHeight: geometry.stripBodyHeight,
-                                                                     side: service.mascotSide),
-                                     rests: service.mascotAtRest, visit: service.mascotVisit,
-                                     mood: service.mascotRestingMood, reaction: service.mascotReaction,
-                                     yieldsToActivities: true)
+                if baryon.fairyUndocked {
+                    let track = NotchMascotSupport.track(stripWidth: geometry.collapsed.width,
+                                                         stripHeight: geometry.stripHeight,
+                                                         wing: geometry.restingWingWidth,
+                                                         cameraWidth: geometry.cameraWidth, floats: false,
+                                                         bodyHeight: geometry.stripBodyHeight,
+                                                         side: service.mascotSide)
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color(red: 0.243, green: 0.353, blue: 0.925).opacity(0.45),
+                                          style: StrokeStyle(lineWidth: 1.2, dash: [2.5, 2.5]))
+                            .frame(width: max(12, track.size * 0.72), height: max(12, track.size * 0.72))
+                            .position(x: track.rest, y: track.baseline)
+                    }
                     .frame(width: geometry.collapsed.width, height: geometry.stripHeight)
-                    // The window's own layer shows it while the island closes around it.
-                    .opacity(service.mascotBridging && displayGeometry == nil ? 0 : 1)
-                    .animation(nil, value: service.mascotBridging)
                     .allowsHitTesting(false)
+                } else {
+                    NotchMascotTrackView(look: NotchMascotSupport.look(),
+                                         track: NotchMascotSupport.track(stripWidth: geometry.collapsed.width,
+                                                                         stripHeight: geometry.stripHeight,
+                                                                         wing: geometry.restingWingWidth,
+                                                                         cameraWidth: geometry.cameraWidth, floats: false,
+                                                                         bodyHeight: geometry.stripBodyHeight,
+                                                                         side: service.mascotSide),
+                                         rests: service.mascotAtRest, visit: service.mascotVisit,
+                                         mood: service.mascotRestingMood, reaction: service.mascotReaction,
+                                         yieldsToActivities: true)
+                        .frame(width: geometry.collapsed.width, height: geometry.stripHeight)
+                        // The window's own layer shows it while the island closes around it.
+                        .opacity(service.mascotBridging && displayGeometry == nil ? 0 : 1)
+                        .animation(nil, value: service.mascotBridging)
+                        .allowsHitTesting(false)
+                }
             }
         }
         .foregroundStyle(.white.opacity(0.9))
@@ -765,6 +804,11 @@ struct NotchRestingStrip: View {
         // the growth in one frame.
         .frame(height: geometry.stripHeight)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .bottom) {
+            if displayGeometry == nil {
+                NotchTipGlowBar(active: service.tipHovered)
+            }
+        }
         .contentShape(Rectangle())
         .accessibilityHidden(true)
     }
@@ -834,6 +878,11 @@ extension NotchModule: PanelOrderItem {
         case .scratchpad: return FeatureStrings.scratchpad(language).pageTitle
         case .agents: return FeatureStrings.notchAgents(language).title
         case .watch: return FeatureStrings.notchWatch(language).title
+        case .teleprompter: return "Teleprompter"
+        case .aiLauncher: return "AI Launcher"
+        case .relaySweep: return "Relay & Sweep"
+        case .shortcuts: return "Shortcuts"
+        case .tasks: return "Tasks"
         }
     }
 }

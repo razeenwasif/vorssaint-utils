@@ -68,6 +68,7 @@ final class RadialMenuService: ObservableObject {
     /// Set while a session was summoned by a mouse button and it is still
     /// down; releasing it runs the pointed slice, mirroring the chord.
     private var holdButton: Int64?
+    private var sessionFrontAppPID: pid_t?
     private var mouseTap: CFMachPort?
     private var mouseTapSource: CFRunLoopSource?
     private var eventMonitors: [Any] = []
@@ -365,6 +366,7 @@ final class RadialMenuService: ObservableObject {
         // to grow from.
         visible = false
         activeProfile = profile
+        sessionFrontAppPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         if RadialMenuSupport.containsNowPlaying(items) {
             let nowPlaying = RadialNowPlayingService.shared
             nowPlaying.dismissDetails()
@@ -759,6 +761,8 @@ final class RadialMenuService: ObservableObject {
             if let action = item.quickToggle { run(action) }
         case .windowLayout:
             if let action = item.windowLayoutAction { run(action) }
+        case .fairy:
+            if let action = item.fairyAction { run(action) }
         case .submenu:
             break
         }
@@ -820,6 +824,61 @@ final class RadialMenuService: ObservableObject {
         // that was active behind it, matching the delay used by visual tools.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             if case .failure = WindowLayoutService.shared.apply(action) { NSSound.beep() }
+        }
+    }
+
+    private func run(_ action: RadialMenuFairyAction) {
+        guard ensureAccessibilityPermission() else { return }
+        let targetPID = sessionFrontAppPID
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        DispatchQueue.global(qos: .userInitiated).async {
+            let selected = (targetPID != nil && targetPID != ownPID)
+                ? (SelectedTextReader.read(processID: targetPID!)?.text ?? "")
+                : ""
+            let trimmed = selected.trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async {
+                guard !trimmed.isEmpty else {
+                    QuickToolHUD.show(icon: "sparkles", message: "Select text first")
+                    NSSound.beep()
+                    return
+                }
+                switch action {
+                case .explain:
+                    CommandBarService.shared.showFairyAnswer(
+                        prompt: "Explain this clearly and concisely:\n\n\(trimmed)",
+                        context: ["source": "radial", "mode": "explain", "selectedText": trimmed]
+                    )
+                case .rewriteAndPaste:
+                    QuickToolHUD.show(icon: "wand.and.stars", message: "Fairy rewriting…")
+                    BaryonBridgeService.shared.askFairy(
+                        text: "Rewrite the following text to be clearer and more natural. Return ONLY the rewritten text with no quotes or preamble:\n\n\(trimmed)",
+                        context: ["source": "radial", "mode": "rewrite"]
+                    ) { _ in } onDone: { result in
+                        switch result {
+                        case .success(let rewritten):
+                            let clean = rewritten.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !clean.isEmpty else {
+                                NSSound.beep()
+                                return
+                            }
+                            if TransientPaste.shared.paste(clean) {
+                                QuickToolHUD.show(icon: "sparkles", message: "Rewritten")
+                            } else {
+                                NSSound.beep()
+                            }
+                        case .failure(let error):
+                            QuickToolHUD.show(icon: "exclamationmark.triangle", message: error.localizedDescription)
+                            NSSound.beep()
+                        }
+                    }
+                case .saveMemory:
+                    BaryonBridgeService.shared.sendContextAction(action: "memory", text: trimmed, source: "radial")
+                    QuickToolHUD.show(icon: "brain", message: "Saving to Memory…")
+                case .makeFlashcard:
+                    BaryonBridgeService.shared.sendContextAction(action: "flashcard", text: trimmed, source: "radial")
+                    QuickToolHUD.show(icon: "rectangle.on.rectangle.angled", message: "Creating Flashcard…")
+                }
+            }
         }
     }
 

@@ -94,6 +94,11 @@ struct NotchEditorStrings {
         case .scratchpad: return scratchpadSummary
         case .agents: return agentsSummary
         case .watch: return watchSummary
+        case .teleprompter: return "Camera-centered scrolling script, hidden from screen shares."
+        case .aiLauncher: return "Launch desktop AI apps and Ghostty CLI agents."
+        case .relaySweep: return "Sync repos to Mac mini with Relay and reclaim disk space with Sweep."
+        case .shortcuts: return "Searchable cheat sheet of all active Vorssaint, Dynamic Island, and Fairy shortcuts."
+        case .tasks: return "Two-way sync with Hadron to-dos and quick Fairy goal promotion."
         }
     }
 }

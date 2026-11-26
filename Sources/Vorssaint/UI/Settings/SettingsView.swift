@@ -106,8 +106,11 @@ struct SettingsView: View {
     private var sidebarSelection: Binding<SettingsSidebarItem.ID?> {
         Binding(
             get: {
-                sidebarPick ?? SettingsSidebarSupport.selection(
-                    for: router.destination, in: sidebarItems,
+                let effectiveDestination = (router.destination.page == .notch && router.notchCompanionActive)
+                    ? FeatureSettingsDestination(.notchMascot)
+                    : router.destination
+                return sidebarPick ?? SettingsSidebarSupport.selection(
+                    for: effectiveDestination, in: sidebarItems,
                     preferredID: router.sidebarFeature.map { .feature($0) })
             },
             // The list sets its selection during a view update, where the
@@ -151,6 +154,7 @@ struct SettingsView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar(searchResults: searchResults)
                 .navigationSplitViewColumnWidth(min: 198, ideal: 210, max: 240)
+                .background(StratusTheme.sidebarBg)
         } detail: {
             // NavigationSplitView's detail slot sometimes queries its content
             // for an unconstrained ideal size (settling the divider, or on a
@@ -166,8 +170,11 @@ struct SettingsView: View {
                     .settingsSectionFocus(for: router.page)
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
             }
+            .background(StratusTheme.canvas)
         }
         .navigationSplitViewStyle(.balanced)
+        .preferredColorScheme(.dark)
+        .tint(StratusTheme.accent)
         .toolbar {
             // SwiftUI adds its sidebar button only to windows it creates, and
             // this one is AppKit's. Without it, a sidebar dragged shut could
@@ -287,6 +294,8 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(StratusTheme.sidebarBg)
             .onChange(of: sidebarPick) { _, selectedID in routeSidebarPick(selectedID) }
             .onChange(of: activeSearchIndex) { _, index in
                 guard let index, searchResults.items.indices.contains(index) else { return }
@@ -348,7 +357,10 @@ struct SettingsView: View {
     private var normalSidebarRows: some View {
         let sections = sidebarSections
         let items = directoryCache.items
-        let selectedID = SettingsSidebarSupport.selection(for: router.destination, in: items,
+        let effectiveDestination = (router.destination.page == .notch && router.notchCompanionActive)
+            ? FeatureSettingsDestination(.notchMascot)
+            : router.destination
+        let selectedID = SettingsSidebarSupport.selection(for: effectiveDestination, in: items,
                                                           preferredID: router.sidebarFeature.map { .feature($0) })
         ForEach(sections) { section in
             Section {
@@ -356,10 +368,14 @@ struct SettingsView: View {
                     ForEach(section.items) { item in
                         HStack(spacing: 9) {
                             Image(systemName: item.icon)
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(selectedID == item.id
-                                    ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
+                                    ? StratusTheme.accentSoft : StratusTheme.textSecondary)
                                 .frame(width: 18)
                             Text(item.title)
+                                .font(.system(size: 12.5, weight: selectedID == item.id ? .semibold : .medium))
+                                .foregroundStyle(selectedID == item.id
+                                    ? StratusTheme.textPrimary : StratusTheme.textPrimary.opacity(0.84))
                         }
                         .tag(item.id)
                         .id(item.id)
@@ -372,13 +388,16 @@ struct SettingsView: View {
                         collapsedSectionIDs.remove(section.id)
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         Image(systemName: collapsedSectionIDs.contains(section.id)
                             ? "chevron.right" : "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .frame(width: 12)
-                        Text(section.title)
+                            .font(.system(size: 8.5, weight: .bold))
+                            .frame(width: 10)
+                        Text(section.title.uppercased())
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .tracking(0.8)
                     }
+                    .foregroundStyle(StratusTheme.textMuted)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

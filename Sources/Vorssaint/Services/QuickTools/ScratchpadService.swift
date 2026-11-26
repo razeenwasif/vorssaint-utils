@@ -57,6 +57,9 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
     private override init() {
         super.init()
         hotkey.onPress = { [weak self] in self?.toggle() }
+        NotesSyncService.shared.onExternalChange = { [weak self] in
+            self?.syncNotesNow()
+        }
     }
 
     func syncWithPreferences() {
@@ -179,12 +182,29 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
             defaults.string(forKey: DefaultsKey.scratchpadRetention))
         do {
             let loaded = try store.load(defaultName: defaultName, retention: retention, now: Date())
-            apply(loaded)
+            let synced = NotesSyncService.shared.syncWithDisk(document: loaded)
+            if synced.changed {
+                _ = save(synced.document)
+            }
+            apply(synced.document)
             hasLoaded = true
             return true
         } catch {
             hasLoaded = false
             return false
+        }
+    }
+
+    func syncNotesNow() {
+        if !hasLoaded {
+            _ = loadApplyingRetention()
+            return
+        }
+        guard let document else { return }
+        let synced = NotesSyncService.shared.syncWithDisk(document: document)
+        if synced.changed {
+            _ = save(synced.document)
+            apply(synced.document)
         }
     }
 
@@ -199,7 +219,10 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
         pendingSave?.cancel()
         pendingSave = nil
         guard hasLoaded, let document else { return }
-        _ = save(document)
+        if save(document),
+           let selected = document.pads.first(where: { $0.id == document.selectedID }) {
+            NotesSyncService.shared.exportPadToDisk(selected)
+        }
     }
 
     /// A failed write keeps the edits in memory and retries on the next change.
@@ -238,7 +261,11 @@ final class ScratchpadService: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     func renamePad(_ id: UUID, to name: String) {
+        let oldName = document?.pads.first(where: { $0.id == id })?.name
         guard let document, let next = document.renaming(id, to: name), save(next) else { return }
+        if let renamed = next.pads.first(where: { $0.id == id }) {
+            NotesSyncService.shared.exportPadToDisk(renamed, previousName: oldName)
+        }
         apply(next, focus: id == selectedPadID)
     }
 

@@ -12,7 +12,7 @@ import Foundation
 // the second activity sharing the closed island.
 
 enum NotchMascotStyle: String, CaseIterable, Identifiable {
-    case minimal, robot
+    case minimal, robot, fairy
 
     var id: String { rawValue }
 }
@@ -78,7 +78,7 @@ struct NotchMascotLook: Equatable {
     var shape: NotchMascotShape
     var palette: NotchMascotPalette
 
-    static let standard = NotchMascotLook(style: .minimal, shape: .ball, palette: .pearl)
+    static let standard = NotchMascotLook(style: .fairy, shape: .ball, palette: .pearl)
 }
 
 enum NotchMascotMood: String, CaseIterable, Identifiable {
@@ -316,6 +316,12 @@ struct NotchMascotFaceLayout: Equatable {
 
 extension NotchMascotLook {
     var face: NotchMascotFaceLayout {
+        if style == .fairy {
+            return NotchMascotFaceLayout(leftEye: CGPoint(x: 0.50, y: 0.54), rightEye: CGPoint(x: 0.57, y: 0.46),
+                                         eyeSize: CGSize(width: 0.21, height: 0.26),
+                                         shineCenter: CGPoint(x: 0.34, y: 0.28), shineRadii: CGSize(width: 0.08, height: 0.05),
+                                         shineAngle: -0.5)
+        }
         if style == .robot {
             return NotchMascotFaceLayout(leftEye: CGPoint(x: 0.36, y: 0.63), rightEye: CGPoint(x: 0.64, y: 0.63),
                                          eyeSize: CGSize(width: 0.085, height: 0.16),
@@ -404,6 +410,8 @@ enum NotchMascotGeometry {
             let parts = robot(size: 1)
             bounds = [parts.ears, parts.antenna, parts.bulb]
                 .reduce(parts.head.boundingBoxOfPath) { $0.union($1.boundingBoxOfPath) }
+        } else if look.style == .fairy {
+            bounds = body(.ball, size: 1).boundingBoxOfPath
         } else {
             bounds = body(look.shape, size: 1).boundingBoxOfPath
         }
@@ -1260,8 +1268,8 @@ enum NotchMascotSupport {
     }
 
     static func look(in defaults: UserDefaults = .standard) -> NotchMascotLook {
-        NotchMascotLook(
-            style: NotchMascotStyle(rawValue: defaults.string(forKey: DefaultsKey.notchMascotStyle) ?? "") ?? .minimal,
+        return NotchMascotLook(
+            style: NotchMascotStyle(rawValue: defaults.string(forKey: DefaultsKey.notchMascotStyle) ?? "") ?? .fairy,
             shape: NotchMascotShape(rawValue: defaults.string(forKey: DefaultsKey.notchMascotShape) ?? "") ?? .ball,
             palette: NotchMascotPalette(rawValue: defaults.string(forKey: DefaultsKey.notchMascotPalette) ?? "") ?? .pearl)
     }

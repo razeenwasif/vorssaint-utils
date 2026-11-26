@@ -26,6 +26,9 @@ struct NotchCalendarEvent: Equatable, Identifiable, Sendable {
     /// How a countdown chosen from the event's menu remembers it; see
     /// `NotchCalendarSupport.countdownKey`.
     var countdownKey = ""
+    var joinURL: String? = nil
+    var webURL: String? = nil
+    var source: String = "apple"
 }
 
 /// What the closed island counts down to: an event's start or, while the

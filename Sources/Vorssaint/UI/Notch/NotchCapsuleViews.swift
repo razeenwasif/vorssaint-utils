@@ -205,6 +205,11 @@ struct NotchCapsuleRestingView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if displayGeometry == nil {
+                    NotchTipGlowBar(active: service.tipHovered)
+                }
+            }
             .accessibilityHidden(true)
     }
 

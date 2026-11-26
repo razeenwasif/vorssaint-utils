@@ -210,6 +210,8 @@ final class SettingsRouter: ObservableObject {
     /// One-shot hint for the Dynamic Island page to show the companion's tab,
     /// where its settings live. Consumed and cleared on arrival.
     @Published var notchCompanion = false
+    /// Reflects whether the Dynamic Island view is currently showing its Companion tab.
+    @Published var notchCompanionActive = false
 
     private var history = [HistoryEntry(destination: FeatureSettingsDestination(.general),
                                         sidebarFeature: nil)]
@@ -231,6 +233,7 @@ final class SettingsRouter: ObservableObject {
         }
         // Any other request, history included, drops a hint nobody took.
         notchCompanion = false
+        notchCompanionActive = false
         let requestID = UUID()
         let samePage = page == destination.page
         page = destination.page

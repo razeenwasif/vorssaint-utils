@@ -358,7 +358,10 @@ struct MetricDetailView: View {
                     .foregroundStyle(.tertiary)
             } else {
                 ForEach(processRows) { row in
-                    ProcessUsageRow(row: row, value: processValue(row))
+                    ProcessUsageRow(row: row, value: processValue(row)) {
+                        let summary = "Diagnose process \(row.name) (PID \(row.pid)) using \(processValue(row)) on \(kind.rawValue)."
+                        _ = BaryonBridgeService.shared.sendContextAction(action: "ask", text: summary, source: "process-monitor")
+                    }
                 }
             }
         }
@@ -558,20 +561,12 @@ struct MetricDetailView: View {
 
     private var summaryColor: Color {
         switch kind {
-        case .cpu, .network:
-            return .accentColor
-        case .gpu:
-            return PanelMetricColor.cyan(for: colorScheme)
-        case .memory:
-            return PanelMetricColor.mint(for: colorScheme)
-        case .disk:
-            return PanelMetricColor.yellow(for: colorScheme)
-        case .battery:
-            return PanelMetricColor.green(for: colorScheme)
-        case .power:
-            return PanelMetricColor.orange(for: colorScheme)
-        case .fan, .connectedDevices:
-            return PanelMetricColor.cyan(for: colorScheme)
+        case .cpu, .power:
+            return StratusTheme.orange
+        case .memory, .battery:
+            return StratusTheme.purple
+        case .gpu, .network, .disk, .fan, .connectedDevices:
+            return StratusTheme.cyan
         }
     }
 

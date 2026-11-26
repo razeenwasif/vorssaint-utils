@@ -163,6 +163,9 @@ enum QuitProtectionSupport {
     static func scopeAllows(_ scope: QuitProtectionScope,
                             bundleIdentifier: String?,
                             exceptions: [String]) -> Bool {
+        if let bundleIdentifier, bundleIdentifier == "dev.razeen.lyra" || bundleIdentifier.hasPrefix("dev.razeen.lyra.") {
+            return false
+        }
         let contains = bundleIdentifier.map { exceptions.contains($0) } ?? false
         switch scope {
         case .all: return true

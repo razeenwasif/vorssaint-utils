@@ -178,6 +178,11 @@ struct NotchPagePreview: View {
             }
         // The live area belongs to the island; the preview explains it instead.
         case .watch: NotchWatchView(size: size)
+        case .teleprompter: NotchTeleprompterView(service: NotchTeleprompterService.shared, size: size, interactive: false)
+        case .aiLauncher: NotchAILauncherView(service: AILauncherService.shared, notch: NotchService.shared, size: size, interactive: false)
+        case .relaySweep: NotchRelaySweepView(size: size, interactive: false)
+        case .shortcuts: NotchShortcutsView(service: NotchService.shared, size: size, interactive: false)
+        case .tasks: NotchTasksView(size: size, interactive: false)
         }
     }
 
@@ -406,6 +411,11 @@ extension NotchModule {
         case .scratchpad: return .yellow
         case .agents: return Color(red: 0.85, green: 0.47, blue: 0.34)
         case .watch: return .purple
+        case .teleprompter: return Color(red: 0.243, green: 0.353, blue: 0.925)
+        case .aiLauncher: return Color(red: 0.20, green: 0.56, blue: 0.98)
+        case .relaySweep: return Color(red: 0.16, green: 0.68, blue: 0.56)
+        case .shortcuts: return Color(red: 0.45, green: 0.52, blue: 0.96)
+        case .tasks: return Color(red: 0.28, green: 0.58, blue: 0.98)
         }
     }
 

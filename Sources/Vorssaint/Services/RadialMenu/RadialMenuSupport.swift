@@ -145,13 +145,14 @@ private struct RadialMenuProfileTriggers: Decodable {
 
 /// Curated starter presets when creating new profiles.
 enum RadialMenuProfilePreset: String, CaseIterable, Identifiable {
-    case general, media, tools, windowLayout, quickToggles, blank
+    case general, fairy, media, tools, windowLayout, quickToggles, blank
 
     var id: String { rawValue }
 
     func title(_ strings: RadialMenuFeatureStrings) -> String {
         switch self {
         case .general: return strings.presetGeneral
+        case .fairy: return "Fairy"
         case .media: return strings.presetMedia
         case .tools: return strings.presetTools
         case .windowLayout: return strings.presetWindowLayout
@@ -163,6 +164,7 @@ enum RadialMenuProfilePreset: String, CaseIterable, Identifiable {
     var defaultColor: RadialMenuColor {
         switch self {
         case .general: return .accent
+        case .fairy: return .blue
         case .media: return .purple
         case .tools: return .cyan
         case .windowLayout: return .orange
@@ -175,6 +177,10 @@ enum RadialMenuProfilePreset: String, CaseIterable, Identifiable {
         switch self {
         case .general:
             return RadialMenuSupport.starterItems
+        case .fairy:
+            return RadialMenuFairyAction.allCases.map {
+                RadialMenuItem(kind: .fairy, payload: $0.rawValue)
+            }
         case .media:
             return [
                 RadialMenuItem(kind: .media, payload: RadialMenuMediaKey.playPause.rawValue),
@@ -231,7 +237,7 @@ enum RadialMenuProfilePreset: String, CaseIterable, Identifiable {
 /// value. Submenus keep their actions in `children`.
 struct RadialMenuItem: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case app, file, url, shortcut, tool, quickToggle, windowLayout, media, submenu
+        case app, file, url, shortcut, tool, quickToggle, windowLayout, media, fairy, submenu
     }
 
     var id = UUID()
@@ -258,6 +264,10 @@ struct RadialMenuItem: Codable, Identifiable, Equatable {
         kind == .windowLayout ? WindowLayoutAction(rawValue: payload) : nil
     }
 
+    var fairyAction: RadialMenuFairyAction? {
+        kind == .fairy ? RadialMenuFairyAction(rawValue: payload) : nil
+    }
+
     /// The symbol drawn when the user picked none. App and file items prefer
     /// their real file icons in the UI; these are the fallbacks.
     var defaultSymbolName: String {
@@ -276,12 +286,38 @@ struct RadialMenuItem: Codable, Identifiable, Equatable {
             case .nowPlaying: return "music.note"
             default: return "playpause.fill"
             }
+        case .fairy: return fairyAction?.symbolName ?? "sparkles"
         case .submenu: return "ellipsis.circle"
         }
     }
 
     var effectiveSymbolName: String {
         symbolName.isEmpty ? defaultSymbolName : symbolName
+    }
+}
+
+/// Fairy AI actions that operate on the frontmost app's selected text.
+enum RadialMenuFairyAction: String, Codable, CaseIterable, Identifiable {
+    case explain, rewriteAndPaste, saveMemory, makeFlashcard
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .explain: return "Explain"
+        case .rewriteAndPaste: return "Rewrite & Paste"
+        case .saveMemory: return "Save Memory"
+        case .makeFlashcard: return "Make Flashcard"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .explain: return "sparkles"
+        case .rewriteAndPaste: return "wand.and.stars"
+        case .saveMemory: return "brain"
+        case .makeFlashcard: return "rectangle.on.rectangle.angled"
+        }
     }
 }
 
@@ -702,6 +738,7 @@ enum RadialMenuSupport {
         case .quickToggle: return item.quickToggle != nil
         case .windowLayout: return item.windowLayoutAction != nil
         case .media: return item.mediaKey != nil
+        case .fairy: return item.fairyAction != nil
         case .submenu: return true
         }
     }
@@ -802,6 +839,7 @@ enum RadialMenuSupport {
         items.contains { item in
             switch item.kind {
             case .shortcut, .windowLayout: return true
+            case .fairy: return true
             case .media: return item.mediaKey?.auxKeyType != nil
             case .submenu: return needsAccessibility(item.children)
             default: return false

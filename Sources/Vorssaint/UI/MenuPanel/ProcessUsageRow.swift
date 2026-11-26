@@ -8,9 +8,11 @@ struct ProcessUsageRow: View {
     let value: String
     var iconSize: CGFloat = 15
     var leadingPadding: CGFloat = 0
+    var onAskFairy: (() -> Void)? = nil
 
     @Environment(\.notchPresentation) private var inNotch
     @ObservedObject private var l10n = L10n.shared
+    @State private var isHovered = false
 
     var body: some View {
         Group {
@@ -59,8 +61,20 @@ struct ProcessUsageRow: View {
                 .font(.system(size: 10.5, weight: .medium))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+            if isHovered, let onAskFairy {
+                Button(action: onAskFairy) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(StratusTheme.accentSoft)
+                        .frame(width: 16, height: 16)
+                        .background(StratusTheme.accent.opacity(0.22), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Ask Fairy")
+            }
         }
         .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
         .padding(.leading, leadingPadding)
     }
 }

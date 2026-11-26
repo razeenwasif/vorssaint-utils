@@ -41,21 +41,27 @@ struct CPUCoreMatrix: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
-        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+        .background(StratusTheme.cardBg, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(StratusTheme.hairline, lineWidth: 0.75))
     }
 
     private func coreGroup(_ segment: CPUCoreSegment, strings: CPUCoreFeatureStrings) -> some View {
-        let name = switch segment.group.name.lowercased() {
+        let lowerName = segment.group.name.lowercased()
+        let name = switch lowerName {
         case "super": strings.superCores
         case "performance": strings.performanceCores
         case "efficiency": strings.efficiencyCores
         default: segment.group.name
         }
+        let barColor: Color = switch lowerName {
+        case "performance": StratusTheme.orange
+        case "super": StratusTheme.purple
+        default: StratusTheme.cyan
+        }
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 ForEach(segment.group.indices, id: \.self) { index in
-                    coreBar(index, width: segment.barWidth, strings: strings)
+                    coreBar(index, width: segment.barWidth, color: barColor, strings: strings)
                 }
             }
             Text("\(name) ×\(segment.group.indices.count)")
@@ -68,25 +74,28 @@ struct CPUCoreMatrix: View {
         .frame(width: segment.width, alignment: .leading)
     }
 
-    private func coreBar(_ index: Int, width: Double, strings: CPUCoreFeatureStrings) -> some View {
+    private func coreBar(_ index: Int, width: Double, color: Color, strings: CPUCoreFeatureStrings) -> some View {
         let value: Double? = usage[index]
         let increasedContrast = contrast == .increased
         return GeometryReader { proxy in
             ZStack(alignment: .bottom) {
-                Rectangle().fill(Color.primary.opacity(0.035))
+                Rectangle().fill(Color.white.opacity(0.04))
                 if let value {
-                    Rectangle()
-                        .fill(Color.primary.opacity(0.78))
-                        .frame(height: proxy.size.height * value)
+                    LinearGradient(
+                        colors: [color, color.opacity(0.65)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: proxy.size.height * value)
                 } else {
                     Text("–").font(.subheadline).foregroundStyle(.secondary)
                         .frame(maxHeight: .infinity)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
             .overlay {
-                RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(Color.primary.opacity(increasedContrast ? 0.65 : 0.25),
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(color.opacity(increasedContrast ? 0.65 : 0.28),
                                   style: StrokeStyle(lineWidth: increasedContrast ? 1.5 : 0.75,
                                                      dash: value == nil ? [2, 2] : []))
             }

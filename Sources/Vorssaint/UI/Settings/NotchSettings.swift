@@ -34,7 +34,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchEnabled) private var enabled = false
     @AppStorage(DefaultsKey.notchMascotEnabled) private var mascotEnabled = false
     @AppStorage(DefaultsKey.notchMascotHidesWhenIdle) private var mascotHidesWhenIdle = true
-    @AppStorage(DefaultsKey.notchMascotStyle) private var mascotStyle = NotchMascotStyle.minimal.rawValue
+    @AppStorage(DefaultsKey.notchMascotStyle) private var mascotStyle = NotchMascotStyle.fairy.rawValue
     @AppStorage(DefaultsKey.notchMascotShape) private var mascotShape = NotchMascotShape.ball.rawValue
     @AppStorage(DefaultsKey.notchMascotPalette) private var mascotPalette = NotchMascotPalette.pearl.rawValue
     @AppStorage(DefaultsKey.notchMascotSide) private var mascotSide = NotchMascotSide.left.rawValue
@@ -179,11 +179,20 @@ struct NotchSettings: View {
         .onChange(of: configuration) { _, _ in sync() }
         .onChange(of: accessData) { _, _ in NotchService.shared.syncWithPreferences() }
         .onChange(of: browserCovers) { _, _ in NotchMusicService.shared.syncBrowserCovers() }
-        .onChange(of: tab) { _, _ in draggingModule = nil; draggingControl = nil }
-        .onAppear(perform: revealDestination)
+        .onAppear {
+            revealDestination()
+            router.notchCompanionActive = (tab == .companion)
+        }
         .onChange(of: router.requestID) { _, _ in revealDestination() }
         .onAppear(perform: consumeCompanionHint)
         .onChange(of: router.notchCompanion) { _, _ in consumeCompanionHint() }
+        .onChange(of: tab) { _, nextTab in
+            draggingModule = nil; draggingControl = nil
+            router.notchCompanionActive = (nextTab == .companion)
+        }
+        .onDisappear {
+            router.notchCompanionActive = false
+        }
         // Uninstalled while its tab shows, the companion leaves the page to the layout.
         .onChange(of: features.isAvailable(.notchMascot)) { _, installed in
             if !installed, tab == .companion { tab = .layout }
@@ -386,7 +395,7 @@ struct NotchSettings: View {
             }
         }
         .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .modifier(StratusCardSurface(cornerRadius: 14))
     }
 
     private func isShown(_ module: NotchModule) -> Bool {
@@ -543,7 +552,7 @@ struct NotchSettings: View {
         case .watch:
             NotchWatchSettingsControls()
                 .toggleStyle(TrailingSwitchToggleStyle())
-        case .mixer, .system, .tools:
+        case .mixer, .system, .tools, .teleprompter, .aiLauncher, .relaySweep, .shortcuts, .tasks:
             EmptyView()
         }
     }
@@ -869,7 +878,7 @@ struct NotchSettings: View {
     /// The one feature a page needs; Captures and System accept any of several.
     private func moduleFeature(_ module: NotchModule) -> AppFeature? {
         switch module {
-        case .controls, .music, .captures, .system: return nil
+        case .controls, .music, .captures, .system, .teleprompter, .aiLauncher, .relaySweep, .shortcuts, .tasks: return nil
         case .mixer: return .mixer
         case .clipboard: return .clipboardHistory
         case .files: return .shelf
@@ -936,7 +945,7 @@ struct NotchSettings: View {
 
     /// The companion where it rests, beside a camera drawn black on black.
     private var restingMascot: some View {
-        let look = NotchMascotLook(style: NotchMascotStyle(rawValue: mascotStyle) ?? .minimal,
+        let look = NotchMascotLook(style: NotchMascotStyle(rawValue: mascotStyle) ?? .fairy,
                                    shape: NotchMascotShape(rawValue: mascotShape) ?? .ball,
                                    palette: NotchMascotPalette(rawValue: mascotPalette) ?? .pearl)
         let right = NotchMascotSide(rawValue: mascotSide) == .right

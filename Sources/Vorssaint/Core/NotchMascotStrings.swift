@@ -68,7 +68,11 @@ struct NotchMascotStrings {
     let keywords: String
 
     func style(_ style: NotchMascotStyle) -> String {
-        style == .robot ? robot : minimal
+        switch style {
+        case .minimal: return minimal
+        case .robot: return robot
+        case .fairy: return "Fairy"
+        }
     }
 
     func shape(_ shape: NotchMascotShape) -> String {

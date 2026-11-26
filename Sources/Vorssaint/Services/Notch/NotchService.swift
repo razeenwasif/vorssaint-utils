@@ -217,6 +217,9 @@ final class NotchService: ObservableObject {
     private var captureClose: (() -> Void)?
     private var captureDismiss: (() -> Void)?
     private var captureHover: ((Bool) -> Void)?
+    @Published private(set) var tipHovered = false
+    @Published private(set) var showingTipActions = false
+    private var tipActionsMonitors: [Any] = []
     private var captureClosesOnCollapse = false
     private var inside = false
     private var hoverEmphasized = false
@@ -973,6 +976,16 @@ final class NotchService: ObservableObject {
     }
 
     var surfaceSize: CGSize {
+        if !expanded && BaryonBridgeService.shared.dockHoverActive {
+            let width = min(geometry.screen.width - 24, max(geometry.cameraWidth + 160, 270))
+            let height = max(geometry.stripHeight + 28, geometry.safeContentTop + 44)
+            return CGSize(width: width, height: height)
+        }
+        if !expanded && showingTipActions {
+            let width = min(geometry.screen.width - 24, max(geometry.cameraWidth + 92, 232))
+            let height = geometry.safeContentTop + 72
+            return CGSize(width: width, height: height)
+        }
         if let capsule = capsuleSurfaceSize { return capsule }
         if fullscreenCompact { return geometry.bareCutout }
         if captureControls != nil {
@@ -982,6 +995,16 @@ final class NotchService: ObservableObject {
             return captureControlsLayout.size
         }
         if expanded { return showingCommandBar ? commandBarSurfaceSize : expandedSize }
+        if BaryonBridgeService.shared.pendingApproval != nil {
+            let width = min(geometry.screen.width - 24, max(geometry.cameraWidth + 140, 440))
+            let height = geometry.safeContentTop + 112
+            return CGSize(width: width, height: height)
+        }
+        if BaryonBridgeService.shared.toast != nil && notice == nil {
+            let width = min(geometry.screen.width - 24, max(geometry.cameraWidth + 160, 380))
+            let height = geometry.safeContentTop + 42
+            return CGSize(width: width, height: height)
+        }
         if dragPlaceholder { return CGSize(width: geometry.peek.width, height: geometry.safeContentTop + 66) }
         if let notice {
             guard noticeExpanded else { return geometry.noticeSize(wings: notice.wings(in: geometry)) }
@@ -1489,6 +1512,9 @@ final class NotchService: ObservableObject {
         // An open page is followed again only from an exit report.
         if !expanded { removeHoverExitMonitors() }
         mutatePresentation(transitionContent: changesPresentation ? (expanded ? .replace : .reveal) : .none) {
+            showingTipActions = false
+            tipHovered = false
+            removeTipActionsMonitors()
             showingCommandBar = false
             showingAppPanel = appPanel
             showingSections = sections
@@ -1519,8 +1545,11 @@ final class NotchService: ObservableObject {
         clipboardPinnedOnly = false
         hoverWork?.cancel(); hoverWork = nil
         if noticeExpanded { noticeWork?.cancel(); noticeWork = nil }
-        mutatePresentation(transitionContent: expanded || peeking || noticeExpanded ? .dismiss : .none) {
+        mutatePresentation(transitionContent: expanded || peeking || noticeExpanded || showingTipActions ? .dismiss : .none) {
             if noticeExpanded { notice = nil; noticeExpanded = false }
+            showingTipActions = false
+            tipHovered = false
+            removeTipActionsMonitors()
             expanded = false
             openedByHover = false
             peeking = false
@@ -2665,6 +2694,10 @@ final class NotchService: ObservableObject {
         presentedMusic = shown
     }
 
+    private var effectiveSharingType: NSWindow.SharingType {
+        (expanded && selected == .teleprompter) ? .none : (NotchSupport.showsInCaptures() ? .readOnly : .none)
+    }
+
     func refreshPresentation(animated: Bool = true, transitionContent: NotchContentTransition = .none) {
         // A notice with a new reading, or the music strip naming its song,
         // fits its new width in place.
@@ -2734,6 +2767,7 @@ final class NotchService: ObservableObject {
             panel?.level = hiddenInFullscreen && !geometry.isNotched && !NotchSupport.coversMenus()
                 ? NotchPanel.fullscreenLevel : NotchPanel.normalLevel
         }
+        panel?.sharingType = effectiveSharingType
         // Preferences can change computed dimensions without publishing a
         // service property. Update SwiftUI's layout along with the native host.
         if let windowHost, windowHost.targetSize != size { objectWillChange.send() }
@@ -2773,7 +2807,7 @@ final class NotchService: ObservableObject {
         let activationRect: CGRect
         if captureControls != nil {
             activationRect = captureControlsCollapsed ? CGRect(origin: .zero, size: size) : .zero
-        } else if stripNotice != nil || dragPlaceholder {
+        } else if stripNotice != nil || dragPlaceholder || showingTipActions {
             activationRect = .zero
         } else if showsCompactActivityPicker {
             let strip = compactActivityGeometry.compactActivitySize
@@ -3662,6 +3696,7 @@ final class NotchService: ObservableObject {
                                         quickAccess: { AnyView(NotchQuickAccessView(service: self, motion: $0, backdrop: $1)) })
             windowHost?.missionControlDidRestore = { [weak self] in self?.missionControlDidRestore() }
             windowHost?.setHoverHandler { [weak self] in self?.hover($0) }
+            windowHost?.setTipHoverHandler { [weak self] in self?.setTipHovered($0) }
             panel?.title = FeatureStrings.notch(L10n.shared.language).title
         }
         if modules.contains(.files), AppFeature.shelf.isAvailable {
@@ -3679,7 +3714,7 @@ final class NotchService: ObservableObject {
                 },
                 update: { [weak self] in self?.updateFileDrop(at: $0) == true }))
         } else { windowHost?.setFileDropActions(nil) }
-        panel?.sharingType = NotchSupport.showsInCaptures() ? .readOnly : .none
+        panel?.sharingType = effectiveSharingType
         updateFullscreenVisibility(displayID: screen.notchDisplayID)
     }
 
@@ -5304,6 +5339,80 @@ extension NotchService {
         let work = DispatchWorkItem { [weak self] in self?.endMascotVisit() }
         mascotVisitWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + retreat.duration, execute: work)
+    }
+
+    func setTipHovered(_ hovered: Bool) {
+        let next = hovered && running && !suspended && !expanded && !showingTipActions
+            && !dragPlaceholder && notice == nil && captureControls == nil
+            && BaryonBridgeService.shared.connected
+        guard next != tipHovered else { return }
+        tipHovered = next
+    }
+
+    func toggleTipActions() {
+        showingTipActions ? dismissTipActions() : showTipActions()
+    }
+
+    func showTipActions() {
+        guard running, !suspended, !expanded, BaryonBridgeService.shared.connected else { return }
+        mutatePresentation(transitionContent: .reveal) {
+            tipHovered = false
+            showingTipActions = true
+        }
+        installTipActionsMonitors()
+        if NotchSupport.usesHapticFeedback() {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        }
+    }
+
+    func dismissTipActions(refresh: Bool = true) {
+        removeTipActionsMonitors()
+        guard showingTipActions else { return }
+        if refresh {
+            mutatePresentation(transitionContent: .dismiss) {
+                showingTipActions = false
+                tipHovered = false
+            }
+        } else {
+            showingTipActions = false
+            tipHovered = false
+        }
+    }
+
+    private func installTipActionsMonitors() {
+        removeTipActionsMonitors()
+        if let localKey = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            guard let self, self.showingTipActions, event.keyCode == 53 else { return event }
+            self.dismissTipActions()
+            return nil
+        }) {
+            tipActionsMonitors.append(localKey)
+        }
+        if let globalClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
+            guard let self, self.showingTipActions else { return }
+            let pt = NSEvent.mouseLocation
+            if self.windowHost?.containsHover(pt) != true {
+                self.dismissTipActions()
+            }
+        }) {
+            tipActionsMonitors.append(globalClick)
+        }
+    }
+
+    private func removeTipActionsMonitors() {
+        for monitor in tipActionsMonitors { NSEvent.removeMonitor(monitor) }
+        tipActionsMonitors.removeAll()
+    }
+
+    /// Plays a brief celebrate reaction when Floating Fairy docks back into the Notch.
+    func playFairyDockSettle() {
+        let now = CACurrentMediaTime()
+        if mascotRestsInView {
+            mascotReaction = NotchMascotReactionEvent(id: UUID(), reaction: .celebrate, start: now)
+        } else if canHostMascotVisit() {
+            beginMascotCameo(.celebrate)
+        }
+        refreshPresentation(animated: true)
     }
 
     /// Over what the closed island shows, the companion comes out from behind

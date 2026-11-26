@@ -675,6 +675,8 @@ enum DefaultsKey {
     static let scratchpadBackgroundOpacity = "scratchpadBackgroundOpacity" // opaque fill over the pad material (ScratchpadSupport.backgroundOpacityRange)
     static let scratchpadDocument = "scratchpadDocument"     // Data: ScratchpadDocument JSON, including named tabs
     static let scratchpadTextSize = "scratchpadTextSize"     // pad-wide point size (ScratchpadSupport.textSizeRange)
+    static let scratchpadICloudSyncEnabled = "scratchpadICloudSyncEnabled"
+    static let baryonUnifiedTray = "baryonUnifiedTray"
     static let micMuteActive = "micMuteActive"               // mic muted by the app (survives relaunch)
     static let micMuteReleasePending = "micMuteReleasePending" // Mute request UUID or true for release. Older stores used false or micMuteActive.
     static let micMuteReleasedUIDs = "micMuteReleasedUIDs"   // legacy list of verified releases awaiting cleanup
@@ -1521,7 +1523,7 @@ enum Defaults {
         DefaultsKey.notchHidesMenuBarIcon: false,
         DefaultsKey.notchKeepAwakeActivity: false,
         DefaultsKey.notchScratchpad: true,
-        DefaultsKey.notchHoverExpands: true,
+        DefaultsKey.notchHoverExpands: false,
         DefaultsKey.notchGesturesEnabled: true,
         DefaultsKey.notchKeyboardLight: true,
         DefaultsKey.notchNotificationsEnabled: true,
@@ -1615,10 +1617,10 @@ enum Defaults {
         DefaultsKey.notchShowInCaptures: true,
         DefaultsKey.notchLockScreen: false,
         DefaultsKey.notchLockSounds: false,
-        DefaultsKey.notchMascotEnabled: false,
+        DefaultsKey.notchMascotEnabled: true,
         DefaultsKey.notchMascotVisits: true,
         DefaultsKey.notchMascotReactions: true,
-        DefaultsKey.notchMascotStyle: NotchMascotStyle.minimal.rawValue,
+        DefaultsKey.notchMascotStyle: NotchMascotStyle.fairy.rawValue,
         DefaultsKey.notchMascotShape: NotchMascotShape.ball.rawValue,
         DefaultsKey.notchMascotPalette: NotchMascotPalette.pearl.rawValue,
         DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,
@@ -1920,6 +1922,8 @@ enum Defaults {
         DefaultsKey.scratchpadCloseOnClickOutside: true,
         DefaultsKey.scratchpadBackgroundOpacity: 0.0,
         DefaultsKey.scratchpadTextSize: ScratchpadSupport.defaultTextSize,
+        DefaultsKey.scratchpadICloudSyncEnabled: false,
+        DefaultsKey.baryonUnifiedTray: false,
         DefaultsKey.micMuteActive: false,
         DefaultsKey.micMuteMenuBarIndicator: true,  // owner's call: on by default in 3.1.8 (badge only shows while muted)
         DefaultsKey.quickLauncherShortcutEnabled: true,
@@ -2183,7 +2187,7 @@ enum Defaults {
                 DefaultsKey.notchLiveEqualizer: false,
                 DefaultsKey.notchQueueEnabled: false,
                 DefaultsKey.notchDownloadsEnabled: false,
-                DefaultsKey.notchOpenOnHover: true,
+                DefaultsKey.notchOpenOnHover: false,
                 DefaultsKey.notchClipboard: false,
                 DefaultsKey.notchCapture: false,
                 DefaultsKey.notchTrackChange: false,

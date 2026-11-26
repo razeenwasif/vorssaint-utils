@@ -18,13 +18,15 @@ struct SettingsCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
             if let title {
-                Text(title).font(.headline)
+                Text(title)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(StratusTheme.textPrimary)
             }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .modifier(StratusCardSurface(cornerRadius: 14))
     }
 }
 
@@ -55,20 +57,21 @@ struct SettingsRow<Accessory: View>: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(title)
+                        .foregroundStyle(StratusTheme.textPrimary)
                     if let badge {
                         Text(badge)
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(Color.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Capsule().fill(Color.accentColor))
+                            .background(Capsule().fill(StratusTheme.accent))
                             .accessibilityHidden(true)
                     }
                 }
                 if let caption {
                     Text(caption)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(StratusTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -82,18 +85,26 @@ struct SettingsRow<Accessory: View>: View {
         if let symbol {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(StratusTheme.accentSoft)
                 .frame(width: 26, height: 26)
-                .background(Color.accentColor.opacity(0.12),
+                .background(StratusTheme.accent.opacity(0.14),
                             in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(StratusTheme.accent.opacity(0.28), lineWidth: 0.5)
+                )
         } else {
             // The menu bar draws the glyph white on a dark bar; the badge keeps
             // that pairing so it reads as the same icon in both appearances.
             MenuBarGlyph()
                 .frame(width: 17, height: 13)
                 .frame(width: 26, height: 26)
-                .background(Color.black.opacity(0.82),
+                .background(Color.black.opacity(0.88),
                             in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(StratusTheme.hairline, lineWidth: 0.5)
+                )
         }
     }
 }

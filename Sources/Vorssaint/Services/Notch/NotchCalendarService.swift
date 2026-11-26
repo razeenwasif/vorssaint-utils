@@ -59,6 +59,15 @@ final class NotchCalendarService: NSObject, ObservableObject {
     @Published var revealing: String?
     /// Countdown keys of the events chosen from their menu.
     @Published private(set) var chosenCountdowns = Set<String>()
+    @Published private(set) var googleCalendarConnected = false
+    var hasGoogleCalendar: Bool { googleCalendarConnected || !cachedGoogleEvents.isEmpty }
+
+    private struct GoogleCalendarCache: Codable {
+        let connected: Bool
+        let events: [BaryonCalendarEvent]
+    }
+
+    private var cachedGoogleEvents: [BaryonCalendarEvent] = []
     private var reader: NotchCalendarReader?
     private var task: Task<Void, Never>?
     private var refreshTimer: Timer?
@@ -72,7 +81,42 @@ final class NotchCalendarService: NSObject, ObservableObject {
     private(set) var countdownLeadTime = NotchCalendarSupport.countdownLeadTime()
     private var excludedCalendars = Set<String>()
 
-    private override init() { super.init() }
+    private static var cacheURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Vorssaint/google-calendar-cache.json")
+    }
+
+    private override init() {
+        super.init()
+        loadGoogleCache()
+    }
+
+    private func loadGoogleCache() {
+        guard let data = try? Data(contentsOf: Self.cacheURL),
+              let cache = try? JSONDecoder().decode(GoogleCalendarCache.self, from: data) else { return }
+        cachedGoogleEvents = cache.events
+        googleCalendarConnected = cache.connected
+    }
+
+    private func saveGoogleCache() {
+        let url = Self.cacheURL
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let cache = GoogleCalendarCache(connected: googleCalendarConnected, events: cachedGoogleEvents)
+        if let data = try? JSONEncoder().encode(cache) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    func applyGoogleCalendarEvents(_ events: [BaryonCalendarEvent], connected: Bool) {
+        googleCalendarConnected = connected
+        cachedGoogleEvents = events
+        saveGoogleCache()
+        if reader != nil {
+            refresh()
+        } else if NotchCalendarSupport.isEnabled() {
+            syncWithPreferences()
+        }
+    }
 
     /// Every event calendar on this Mac, for the Settings list. Works while
     /// the island's reader is stopped, since the list is edited from Settings.
@@ -143,6 +187,7 @@ final class NotchCalendarService: NSObject, ObservableObject {
         }
         permissionSubscription = Permissions.shared.$calendarAccess.removeDuplicates().dropFirst()
             .sink { [weak self] _ in self?.refresh() }
+        BaryonBridgeService.shared.requestCalendarEvents()
         refresh()
     }
 
@@ -151,7 +196,8 @@ final class NotchCalendarService: NSObject, ObservableObject {
         refreshTimer?.invalidate(); refreshTimer = nil
         generation = UUID()
         guard NotchCalendarSupport.isEnabled(), let reader else { stop(); return }
-        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+        let hasApple = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        guard hasApple || hasGoogleCalendar else {
             events = []; countdown = nil; loading = false
             return
         }
@@ -163,20 +209,26 @@ final class NotchCalendarService: NSObject, ObservableObject {
             visible: interval, current: currentInterval,
             countdownEnabled: countdownEnabled || timeLeftEnabled || !chosenCountdowns.isEmpty)
         let excluded = excludedCalendars
+        let googleSnapshot = Self.mappedGoogleEvents(cachedGoogleEvents)
         loading = events.isEmpty
         task = Task { @MainActor [weak self] in
-            let result = await reader.read(interval: interval, excluded: excluded)
-            let currentResult = needsCurrentRead
-                ? await reader.read(interval: currentInterval, excluded: excluded) : result
+            let appleResult = hasApple ? await reader.read(interval: interval, excluded: excluded) : []
+            let appleCurrent = hasApple
+                ? (needsCurrentRead ? await reader.read(interval: currentInterval, excluded: excluded) : appleResult)
+                : []
             guard !Task.isCancelled, let self, self.generation == requested,
                   NotchCalendarSupport.isEnabled() else { return }
             let now = Date()
-            guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+            let nowApple = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+            guard nowApple || self.hasGoogleCalendar else {
                 self.events = []; self.countdown = nil; self.loading = false; self.task = nil
                 return
             }
-            self.events = NotchCalendarSupport.ordered(result)
-            let currentEvents = needsCurrentRead ? NotchCalendarSupport.ordered(currentResult) : self.events
+            let mergedVisible = Self.mergeEvents(apple: nowApple ? appleResult : [], google: googleSnapshot, interval: interval)
+            self.events = NotchCalendarSupport.ordered(mergedVisible)
+            let currentEvents = needsCurrentRead
+                ? NotchCalendarSupport.ordered(Self.mergeEvents(apple: nowApple ? appleCurrent : [], google: googleSnapshot, interval: currentInterval))
+                : self.events
             self.updateChosenCountdowns(currentEvents, now: now)
             self.countdown = NotchCalendarSupport.countdown(currentEvents, now: now, starts: self.countdownEnabled,
                                                             ends: self.timeLeftEnabled, chosen: self.chosenCountdowns,
@@ -195,6 +247,94 @@ final class NotchCalendarService: NSObject, ObservableObject {
             RunLoop.main.add(timer, forMode: .common)
             self.refreshTimer = timer
         }
+    }
+
+    private static func mappedGoogleEvents(_ raw: [BaryonCalendarEvent]) -> [NotchCalendarEvent] {
+        raw.compactMap { item in
+            guard let start = parseGoogleDate(item.start, allDay: item.allDay),
+                  let end = parseGoogleDate(item.end, allDay: item.allDay),
+                  end > start else { return nil }
+            let key = NotchCalendarSupport.countdownKey(identifier: "gcal:\(item.id)", occurrence: start)
+            return NotchCalendarEvent(
+                id: "gcal:" + item.id + ":" + String(start.timeIntervalSinceReferenceDate),
+                title: item.title,
+                calendar: item.calendarName.isEmpty ? "Google Calendar" : item.calendarName,
+                start: start,
+                end: end,
+                allDay: item.allDay,
+                location: item.location,
+                color: parseHexColor(item.color),
+                calendarItemIdentifier: "",
+                recurring: false,
+                countdownKey: key,
+                joinURL: item.joinUrl.isEmpty ? nil : item.joinUrl,
+                webURL: item.url,
+                source: "google"
+            )
+        }
+    }
+
+    private static func mergeEvents(apple: [NotchCalendarEvent], google: [NotchCalendarEvent], interval: DateInterval) -> [NotchCalendarEvent] {
+        let filteredGoogle = google.filter { $0.start < interval.end && $0.end > interval.start }
+        var result: [NotchCalendarEvent] = []
+        var indexByKey: [String: Int] = [:]
+
+        func dedupeKey(_ e: NotchCalendarEvent) -> String {
+            let normTitle = e.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let minuteBucket = Int((e.start.timeIntervalSinceReferenceDate / 60.0).rounded())
+            return "\(normTitle)|\(minuteBucket)"
+        }
+
+        for event in apple {
+            let key = dedupeKey(event)
+            if indexByKey[key] == nil {
+                indexByKey[key] = result.count
+                result.append(event)
+            }
+        }
+        for event in filteredGoogle {
+            let key = dedupeKey(event)
+            if let idx = indexByKey[key] {
+                var existing = result[idx]
+                if existing.joinURL == nil, let join = event.joinURL { existing.joinURL = join }
+                if existing.webURL == nil, let web = event.webURL { existing.webURL = web }
+                result[idx] = existing
+            } else {
+                indexByKey[key] = result.count
+                result.append(event)
+            }
+        }
+        return result
+    }
+
+    private static func parseGoogleDate(_ value: String, allDay: Bool) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if allDay || trimmed.count == 10 {
+            let dayFmt = DateFormatter()
+            dayFmt.locale = Locale(identifier: "en_US_POSIX")
+            dayFmt.timeZone = Calendar.current.timeZone
+            dayFmt.dateFormat = "yyyy-MM-dd"
+            if let d = dayFmt.date(from: trimmed) { return d }
+        }
+        let isoFrac = ISO8601DateFormatter()
+        isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = isoFrac.date(from: trimmed) { return d }
+        let isoBasic = ISO8601DateFormatter()
+        isoBasic.formatOptions = [.withInternetDateTime]
+        return isoBasic.date(from: trimmed)
+    }
+
+    private static func parseHexColor(_ hex: String) -> NotchCalendarColor {
+        let clean = hex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+        guard clean.count == 6, let rgb = UInt64(clean, radix: 16) else {
+            return NotchCalendarColor(red: 0.30, green: 0.55, blue: 0.96)
+        }
+        return NotchCalendarColor(
+            red: Double((rgb >> 16) & 0xFF) / 255.0,
+            green: Double((rgb >> 8) & 0xFF) / 255.0,
+            blue: Double(rgb & 0xFF) / 255.0
+        )
     }
 
     @objc private func timedRefresh() { refresh() }

@@ -129,47 +129,153 @@ enum SettingsDirectory {
             }
         guard let essentials = grouped.first(where: { $0.id == 0 }) else { return grouped }
         let categories = FeatureStrings.settingsCategories(language)
-        // Monitor keeps its tool rows, such as Fan Control, beside it.
-        let core = essentials.items.filter { item in
-            switch item.id {
-            case .page(.general), .page(.features),
-                 .setting(.panelConfiguration): return true
-            default: return item.destination.page == .monitor
-            }
+
+        var essentialsItems: [SettingsSidebarItem] = []
+        if FeatureVisibilitySupport.isPageVisible(.notch, isAvailable: isAvailable) {
+            essentialsItems.append(SettingsSidebarItem(
+                id: .page(.notch),
+                destination: FeatureSettingsDestination(.notch),
+                title: FeatureStrings.notch(language).title,
+                icon: "macbook"
+            ))
         }
-        // The companion lives in the island, and its settings in a tab of the
-        // island's page rather than a row of their own.
-        let islandPages: Set<SettingsSidebarItem.ID> = [.page(.notch)]
-        let island = grouped.first(where: { $0.id == 4 })?.items.filter {
-            islandPages.contains($0.id)
-        } ?? []
-        let sound: [SettingsSidebarItem] = essentials.items.filter { item in
+        if isAvailable(.notchMascot) {
+            essentialsItems.append(SettingsSidebarItem(
+                id: .page(.notchMascot),
+                destination: FeatureSettingsDestination(.notchMascot),
+                title: "Fairy Companion",
+                icon: "sparkles"
+            ))
+        }
+        essentialsItems += essentials.items.filter { $0.destination.page == .monitor }
+        essentialsItems += essentials.items.filter { item in
+            item.id == .page(.general) || item.id == .setting(.panelConfiguration)
+        }
+
+        var toolsItems: [SettingsSidebarItem] = []
+        if isAvailable(.commandBar) {
+            toolsItems.append(SettingsSidebarItem(
+                id: .page(.commandBar),
+                destination: FeatureSettingsDestination(.commandBar),
+                title: FeatureStrings.commandBar(language).pageTitle,
+                icon: "command"
+            ))
+        }
+        if [AppFeature.quickLauncher, .quickToggles, .cameraPreview, .scratchpad].contains(where: isAvailable) {
+            toolsItems.append(SettingsSidebarItem(
+                id: .page(.quickTools),
+                destination: FeatureSettingsDestination(.quickTools),
+                title: s.quickToolsTab,
+                icon: "wand.and.rays"
+            ))
+        }
+        if [AppFeature.screenshot, .screenRecorder, .screenOCR, .colorPicker].contains(where: isAvailable) {
+            toolsItems.append(SettingsSidebarItem(
+                id: .page(.screenshot),
+                destination: FeatureSettingsDestination(.screenshot),
+                title: FeatureStrings.screenshot(language).screenCaptureTitle,
+                icon: "camera.viewfinder"
+            ))
+        }
+        if isAvailable(.clipboardHistory) || isAvailable(.pastePlain) {
+            toolsItems.append(SettingsSidebarItem(
+                id: .page(.clipboard),
+                destination: FeatureSettingsDestination(.clipboard),
+                title: FeatureStrings.clipboard(language).title,
+                icon: "doc.on.clipboard"
+            ))
+        }
+        if isAvailable(.shelf) {
+            toolsItems.append(SettingsSidebarItem(
+                id: .page(.shelf),
+                destination: FeatureSettingsDestination(.shelf),
+                title: s.shelfName,
+                icon: "tray.full"
+            ))
+        }
+        if isAvailable(.radialMenu) {
+            toolsItems.append(SettingsSidebarItem(
+                id: .page(.radialMenu),
+                destination: FeatureSettingsDestination(.radialMenu),
+                title: FeatureStrings.radialMenu(language).pageTitle,
+                icon: "circle.grid.cross"
+            ))
+        }
+
+        var systemItems: [SettingsSidebarItem] = []
+        systemItems += essentials.items.filter { item in
             item.destination.page == .general
                 && item.destination.sectionAnchor != nil
                 && item.destination.sectionAnchor != .panelConfiguration
         }
-        let energy: [SettingsSidebarItem] = essentials.items.filter {
-            $0.destination.page == .energy
+        if isAvailable(.micMute) {
+            systemItems.append(SettingsSidebarItem(
+                id: .feature(.micMute),
+                destination: FeatureSettingsDestination(.quickTools, sectionAnchor: .micMute),
+                title: s.micMuteName,
+                icon: AppFeature.micMute.symbolName
+            ))
         }
-        func rows(_ id: Int) -> [SettingsSidebarItem] {
-            grouped.first(where: { $0.id == id })?.items ?? []
+        if [AppFeature.keepAwake, .brightness, .extraBrightness].contains(where: isAvailable) {
+            systemItems.append(SettingsSidebarItem(
+                id: .page(.energy),
+                destination: FeatureSettingsDestination(.energy),
+                title: s.tabEnergy,
+                icon: "bolt.fill"
+            ))
         }
-        let byGroup = SettingsSidebarSupport.featureGroupRows(
-            windowsControls: rows(1), utilities: rows(4).filter {
-                !islandPages.contains($0.id) && $0.id != .page(.notchMascot)
-            })
-        let featured = [
-            SettingsSidebarSection(id: 0, title: categories.essentials,
-                                   items: Array(core.prefix(3)) + island + Array(core.dropFirst(3))),
-            SettingsSidebarSection(id: 4, title: categories.utilities, items: byGroup.utilities),
-            SettingsSidebarSection(id: 6, title: hub.groupSound, items: sound + byGroup.sound),
-            SettingsSidebarSection(id: 7, title: hub.groupEnergyDisplay, items: energy),
-            SettingsSidebarSection(id: 1, title: hub.groupWindowsDock, items: byGroup.windowsDock),
-            SettingsSidebarSection(id: 8, title: hub.groupMouseKeyboard, items: byGroup.mouseKeyboard),
-            SettingsSidebarSection(id: 2, title: categories.files, items: rows(2) + byGroup.files),
+        if isAvailable(.windowLayout) || isAvailable(.windowMaximizer) {
+            systemItems.append(SettingsSidebarItem(
+                id: .page(.windowLayout),
+                destination: FeatureSettingsDestination(.windowLayout),
+                title: FeatureStrings.windowLayout(language).title,
+                icon: "rectangle.3.group"
+            ))
+        }
+        if isAvailable(.switcher) {
+            systemItems.append(SettingsSidebarItem(
+                id: .page(.switcher),
+                destination: FeatureSettingsDestination(.switcher),
+                title: s.tabSwitcher,
+                icon: "rectangle.on.rectangle"
+            ))
+        }
+        if isAvailable(.textSnippets) {
+            systemItems.append(SettingsSidebarItem(
+                id: .page(.textSnippets),
+                destination: FeatureSettingsDestination(.textSnippets),
+                title: FeatureStrings.snippets(language).pageTitle,
+                icon: "text.append"
+            ))
+        }
+
+        let appItems: [SettingsSidebarItem] = [
+            SettingsSidebarItem(
+                id: .page(.features),
+                destination: FeatureSettingsDestination(.features),
+                title: hub.pageTitle,
+                icon: "square.grid.2x2"
+            ),
+            SettingsSidebarItem(
+                id: .page(.shortcuts),
+                destination: FeatureSettingsDestination(.shortcuts),
+                title: s.shortcutsPageTitle,
+                icon: "command"
+            ),
+            SettingsSidebarItem(
+                id: .page(.advanced),
+                destination: FeatureSettingsDestination(.advanced),
+                title: s.tabAdvanced,
+                icon: "wrench.and.screwdriver"
+            ),
         ]
-        let remaining = grouped.filter { ![0, 1, 2, 4].contains($0.id) }
-        return [featured[0]] + featured.dropFirst().filter { !$0.items.isEmpty } + remaining
+
+        return [
+            SettingsSidebarSection(id: 0, title: categories.essentials, items: essentialsItems),
+            SettingsSidebarSection(id: 1, title: categories.utilities, items: toolsItems),
+            SettingsSidebarSection(id: 2, title: "System", items: systemItems),
+            SettingsSidebarSection(id: 3, title: categories.app, items: appItems),
+        ].filter { !$0.items.isEmpty }
     }
 
     static func sidebarItems(_ s: Strings,

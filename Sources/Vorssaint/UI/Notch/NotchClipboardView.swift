@@ -16,6 +16,7 @@ struct NotchClipboardView: View {
     @State private var query = ""
     @State private var searchSurface = ClipboardHistorySearchSurface.view(UUID())
     @State private var copiedID: UUID?
+    @State private var transformingID: UUID?
     private var pinnedOnly: Bool {
         get { service.clipboardPinnedOnly }
         nonmutating set { service.clipboardPinnedOnly = newValue }
@@ -398,6 +399,9 @@ struct NotchClipboardView: View {
                     if entry.kind == .image, AppFeature.screenshot.isAvailable {
                         NotchIconButton(symbol: "pencil", title: text.edit) { history.editImage(entry) }
                     }
+                    if entry.kind == .text {
+                        fairyTransformMenu(entry)
+                    }
                     NotchIconButton(symbol: copiedID == entry.id ? "checkmark" : "doc.on.doc",
                                     title: copiedID == entry.id ? text.copied : text.copy) { copy(entry) }
                     NotchIconButton(symbol: entry.isPinned ? "pin.fill" : "pin",
@@ -460,6 +464,9 @@ struct NotchClipboardView: View {
                 if entry.kind == .image, AppFeature.screenshot.isAvailable {
                     NotchIconButton(symbol: "pencil", title: text.edit) { history.editImage(entry) }
                 }
+                if entry.kind == .text {
+                    fairyTransformMenu(entry)
+                }
                 NotchIconButton(symbol: copiedID == entry.id ? "checkmark" : "doc.on.doc",
                                 title: copiedID == entry.id ? text.copied : text.copy) { copy(entry) }
                 NotchIconButton(symbol: entry.isPinned ? "pin.fill" : "pin",
@@ -480,6 +487,23 @@ struct NotchClipboardView: View {
             Button(l10n.s.menuPaste) { paste(entry) }
         }
         Button(text.copy) { copy(entry) }
+        if entry.kind == .text {
+            Menu("Fairy Transform") {
+                ForEach(ClipboardFairyTransform.allCases) { kind in
+                    Button {
+                        transform(entry, using: kind)
+                    } label: {
+                        Label(kind.title, systemImage: kind.symbolName)
+                    }
+                }
+                Divider()
+                Button {
+                    askFairyAboutClipboard(entry)
+                } label: {
+                    Label("Ask Fairy…", systemImage: "sparkles")
+                }
+            }
+        }
         Divider()
         Button(entry.isPinned ? text.unpin : text.pin) { history.togglePin(entry) }
         Button(text.moveUp) { move(entry, .up) }
@@ -595,6 +619,134 @@ struct NotchClipboardView: View {
     private func remove(_ entry: ClipboardHistoryEntry) {
         if copiedID == entry.id { copiedID = nil }
         history.remove(entry)
+    }
+
+    private enum ClipboardFairyTransform: String, CaseIterable, Identifiable {
+        case summarize, fixGrammar, formatJSON, draftReply
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .summarize: return "Summarize"
+            case .fixGrammar: return "Fix Grammar"
+            case .formatJSON: return "Format JSON"
+            case .draftReply: return "Draft Reply"
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .summarize: return "text.quote"
+            case .fixGrammar: return "checkmark.bubble"
+            case .formatJSON: return "curlybraces"
+            case .draftReply: return "arrowshape.turn.up.left"
+            }
+        }
+
+        func prompt(for text: String) -> String {
+            let instruction: String
+            switch self {
+            case .summarize:
+                instruction = "Summarize the following text clearly in 1-3 concise bullet points or sentences."
+            case .fixGrammar:
+                instruction = "Fix spelling, grammar, and punctuation while preserving the tone and meaning."
+            case .formatJSON:
+                instruction = "Parse and pretty-print the following content as valid, properly indented JSON."
+            case .draftReply:
+                instruction = "Draft a clear, natural, polite reply to the following message."
+            }
+            return "\(instruction) Return ONLY the result with no preamble or extra commentary:\n\n\(text)"
+        }
+    }
+
+    @ViewBuilder
+    private func fairyTransformMenu(_ entry: ClipboardHistoryEntry) -> some View {
+        if transformingID == entry.id {
+            ProgressView()
+                .controlSize(.mini)
+                .frame(width: 28, height: 28)
+        } else {
+            Menu {
+                ForEach(ClipboardFairyTransform.allCases) { kind in
+                    Button {
+                        transform(entry, using: kind)
+                    } label: {
+                        Label(kind.title, systemImage: kind.symbolName)
+                    }
+                }
+                Divider()
+                Button {
+                    askFairyAboutClipboard(entry)
+                } label: {
+                    Label("Ask Fairy…", systemImage: "sparkles")
+                }
+            } label: {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.0))
+                    .frame(width: 28, height: 28)
+                    .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Fairy AI transforms")
+            .accessibilityLabel("Fairy AI transforms")
+        }
+    }
+
+    private func askFairyAboutClipboard(_ entry: ClipboardHistoryEntry) {
+        let content = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        service.collapse()
+        CommandBarService.shared.showFairyAnswer(
+            prompt: "Explain or help with this clipboard text:\n\n\(content)",
+            context: ["source": "clipboard", "mode": "ask"]
+        )
+    }
+
+    private func transform(_ entry: ClipboardHistoryEntry, using kind: ClipboardFairyTransform) {
+        let content = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty, transformingID == nil else {
+            NSSound.beep()
+            return
+        }
+        transformingID = entry.id
+        BaryonBridgeService.shared.askFairy(
+            text: kind.prompt(for: content),
+            context: ["source": "clipboard", "mode": kind.rawValue]
+        ) { _ in } onDone: { result in
+            if transformingID == entry.id { transformingID = nil }
+            switch result {
+            case .success(let output):
+                let clean = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !clean.isEmpty else {
+                    NSSound.beep()
+                    return
+                }
+                if permissions.accessibility {
+                    service.collapse()
+                    if TransientPaste.shared.paste(clean) {
+                        QuickToolHUD.show(icon: "sparkles", message: "\(kind.title) pasted")
+                    } else {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(clean, forType: .string)
+                        QuickToolHUD.show(icon: "sparkles", message: "\(kind.title) copied")
+                    }
+                } else {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(clean, forType: .string)
+                    QuickToolHUD.show(icon: "sparkles", message: "\(kind.title) copied")
+                }
+            case .failure(let error):
+                QuickToolHUD.show(icon: "exclamationmark.triangle", message: error.localizedDescription)
+                NSSound.beep()
+            }
+        }
     }
 
     /// A picture rounded at its own edges, then placed in the room it may

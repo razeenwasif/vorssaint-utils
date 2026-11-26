@@ -829,6 +829,9 @@ enum MixerRoutingSupport {
         let bundle = (bundleIdentifier ?? "")
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
             .lowercased()
+        if bundle == "dev.razeen.lyra" || bundle.hasPrefix("dev.razeen.lyra.") {
+            return true
+        }
         if bundle == "us.zoom.xos" || bundle.hasPrefix("us.zoom.") {
             return true
         }

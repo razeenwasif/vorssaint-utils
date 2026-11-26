@@ -608,6 +608,10 @@ final class NotchWindowHost: NSObject, CAAnimationDelegate {
         quickAccessContainer?.hoverChanged = handler
     }
 
+    func setTipHoverHandler(_ handler: @escaping (Bool) -> Void) {
+        canvas.tipHoverChanged = handler
+    }
+
     func containsHover(_ screenPoint: CGPoint) -> Bool {
         guard isPresented, !concealedForMissionControl else { return false }
         // Hover follows the destination bounds, not a transient mask edge.
@@ -1152,7 +1156,9 @@ private final class NotchCanvas: NSView {
     private let activationButton = NotchActivationButton()
     private var activationRect = CGRect.zero
     private var hoverTrackingArea: NSTrackingArea?
+    private var tipTrackingArea: NSTrackingArea?
     var hoverChanged: ((Bool) -> Void)?
+    var tipHoverChanged: ((Bool) -> Void)?
     private let silhouette = CAShapeLayer()
     private let edge = CAShapeLayer()
     private let edgeMask = CALayer()
@@ -1437,12 +1443,14 @@ private final class NotchCanvas: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if event.trackingArea === hoverTrackingArea { hoverChanged?(true) }
+        if event.trackingArea === tipTrackingArea { tipHoverChanged?(true) }
+        else if event.trackingArea === hoverTrackingArea { hoverChanged?(true) }
         else { super.mouseEntered(with: event) }
     }
 
     override func mouseExited(with event: NSEvent) {
-        if event.trackingArea === hoverTrackingArea { hoverChanged?(false) }
+        if event.trackingArea === tipTrackingArea { tipHoverChanged?(false) }
+        else if event.trackingArea === hoverTrackingArea { hoverChanged?(false) }
         else { super.mouseExited(with: event) }
     }
 
@@ -1868,6 +1876,20 @@ private final class NotchCanvas: NSView {
         updateGeometry()
     }
 
+    private func tipRect(for size: CGSize) -> CGRect {
+        guard size.height > 0 && size.height <= 64 else { return .zero }
+        let width = min(104.0, max(58.0, size.width * 0.44))
+        let height = min(15.0, max(10.0, size.height * 0.46))
+        return CGRect(x: islandX(size) + (size.width - width) / 2,
+                      y: max(0, size.height - height),
+                      width: width, height: height)
+    }
+
+    func isPointInTip(_ point: CGPoint) -> Bool {
+        let rect = tipRect(for: contentSize)
+        return !rect.isEmpty && rect.contains(point)
+    }
+
     func updateGeometry() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1905,6 +1927,18 @@ private final class NotchCanvas: NSView {
             hoverTrackingArea = area
             addTrackingArea(area)
         }
+        let nextTipRect = tipRect(for: contentSize)
+        if tipTrackingArea?.rect != nextTipRect {
+            if let tipTrackingArea { removeTrackingArea(tipTrackingArea) }
+            if nextTipRect.isEmpty {
+                tipTrackingArea = nil
+                tipHoverChanged?(false)
+            } else {
+                let area = NSTrackingArea(rect: nextTipRect, options: [.mouseEnteredAndExited, .activeAlways, .enabledDuringMouseDrag], owner: self, userInfo: nil)
+                tipTrackingArea = area
+                addTrackingArea(area)
+            }
+        }
         CATransaction.commit()
     }
 }
@@ -1918,6 +1952,22 @@ final class NotchActivationButton: NSButton {
     override var acceptsFirstResponder: Bool { false }
     override func mouseDown(with event: NSEvent) {
         willPress?()
+        let canvasPoint = superview?.convert(event.locationInWindow, from: nil) ?? .zero
+        let isTipClick = (superview as? NotchCanvas)?.isPointInTip(canvasPoint) ?? NotchService.shared.tipHovered
+        if NotchFairyDragController.shared.canStartDrag(), let window {
+            NotchFairyDragController.shared.trackDrag(from: event, in: window) { [weak self] in
+                if isTipClick && BaryonBridgeService.shared.connected {
+                    NotchService.shared.toggleTipActions()
+                } else {
+                    self?.activate?()
+                }
+            }
+            return
+        }
+        if isTipClick && BaryonBridgeService.shared.connected {
+            NotchService.shared.toggleTipActions()
+            return
+        }
         super.mouseDown(with: event)
     }
     @objc func invoke() { activate?() }

@@ -92,6 +92,10 @@ enum AutoQuitSupport {
     static func isExcepted(bundleIdentifier: String?,
                            bundleURL: URL?,
                            exceptions: [String]) -> Bool {
+        if let bundleIdentifier,
+           BaryonHelperMode.excludedBundleIdentifiers.contains(bundleIdentifier) {
+            return true
+        }
         if let bundleIdentifier, exceptions.contains(bundleIdentifier) { return true }
         if let bundleIdentifier,
            bundleIdentifier.hasPrefix(guestWindowBundleIdentifierPrefix),

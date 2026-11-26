@@ -684,6 +684,7 @@ private struct RadialItemRow: View {
         case .quickToggle: return FeatureStrings.quickToggles(L10n.shared.language).pageTitle
         case .windowLayout: return FeatureStrings.windowLayout(L10n.shared.language).title
         case .media: return text.kindMedia
+        case .fairy: return "Fairy"
         case .submenu: return text.kindSubmenu
         }
     }
@@ -871,6 +872,7 @@ private struct RadialItemEditor: View {
                             .tag(RadialMenuItem.Kind.windowLayout)
                     }
                     Text(text.kindMedia).tag(RadialMenuItem.Kind.media)
+                    Text("Fairy").tag(RadialMenuItem.Kind.fairy)
                     if allowsSubmenu {
                         Text(text.kindSubmenu).tag(RadialMenuItem.Kind.submenu)
                     }
@@ -954,6 +956,7 @@ private struct RadialItemEditor: View {
             case .quickToggle: item.payload = availableQuickToggles.first?.rawValue ?? ""
             case .windowLayout: item.payload = WindowLayoutAction.leftHalf.rawValue
             case .media: item.payload = RadialMenuMediaKey.playPause.rawValue
+            case .fairy: item.payload = RadialMenuFairyAction.explain.rawValue
             default: item.payload = ""
             }
             if kind != .submenu { item.children = [] }
@@ -1076,6 +1079,13 @@ private struct RadialItemEditor: View {
                 Text(text.mediaPrevious).tag(RadialMenuMediaKey.previousTrack.rawValue)
                 Text(text.mediaNext).tag(RadialMenuMediaKey.nextTrack.rawValue)
                 Text(text.mediaNowPlaying).tag(RadialMenuMediaKey.nowPlaying.rawValue)
+            }
+        case .fairy:
+            Picker("Fairy Action", selection: $item.payload) {
+                ForEach(RadialMenuFairyAction.allCases) { action in
+                    Label(action.title, systemImage: action.symbolName)
+                        .tag(action.rawValue)
+                }
             }
         case .submenu:
             EmptyView()

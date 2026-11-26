@@ -90,7 +90,7 @@ struct FeatureHubSettings: View {
                 if tab == .features {
                     dynamicIslandCard
                     presetsCard
-                    ForEach(FeatureGroup.allCases.filter { $0 != .dynamicIsland }, id: \.self) { group in
+                    ForEach(FeatureGroup.allCases.filter { $0 != .dynamicIsland && !AppFeature.features(in: $0).isEmpty }, id: \.self) { group in
                         groupCard(group)
                     }
                     VStack(alignment: .leading, spacing: 4) {

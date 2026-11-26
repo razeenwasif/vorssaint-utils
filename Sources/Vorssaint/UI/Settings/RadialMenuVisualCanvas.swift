@@ -367,6 +367,7 @@ struct RadialMenuVisualCanvas: View {
         case .quickToggle: return FeatureStrings.quickToggles(L10n.shared.language).pageTitle
         case .windowLayout: return FeatureStrings.windowLayout(L10n.shared.language).title
         case .media: return text.kindMedia
+        case .fairy: return "Fairy"
         case .submenu: return text.kindSubmenu
         }
     }

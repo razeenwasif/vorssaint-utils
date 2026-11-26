@@ -915,6 +915,28 @@ struct ScreenshotEditorView: View {
             }
             Divider().frame(height: 16).padding(.horizontal, 3)
 
+            Button {
+                commitEditingTextIfNeeded()
+                controller.askFairy()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Ask Fairy")
+                        .font(.system(size: 11.5, weight: .semibold))
+                }
+                .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.0))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(red: 0.16, green: 0.42, blue: 0.96).opacity(0.22),
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .screenshotSafeHelp("Ask Fairy about this screenshot")
+            .accessibilityLabel("Ask Fairy")
+
+            Divider().frame(height: 16).padding(.horizontal, 3)
+
             Menu {
                 Button(strings.saveButton) {
                     commitEditingTextIfNeeded()

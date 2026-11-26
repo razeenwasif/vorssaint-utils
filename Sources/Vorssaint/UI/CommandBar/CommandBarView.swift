@@ -180,6 +180,9 @@ struct CommandBarView: View {
             case .capturingShortcut(let entryID):
                 Divider()
                 shortcutCard(entryID: entryID)
+            case .fairyAnswer(let prompt):
+                Divider()
+                fairyAnswerCard(prompt: prompt)
             }
             // A footer under a bare field reads as a second row of chrome on
             // something meant to be one strip.
@@ -1183,6 +1186,92 @@ struct CommandBarView: View {
                 .padding(.vertical, 12)
             }
         }
+    }
+
+    private func fairyAnswerCard(prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.0))
+                Text(prompt)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if service.fairyAnswerStreaming {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let error = service.fairyAnswerError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                    } else if service.fairyAnswerText.isEmpty && service.fairyAnswerStreaming {
+                        Text("Fairy is thinking…")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(service.fairyAnswerText)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+            }
+            .frame(minHeight: 88, maxHeight: 280)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            HStack(spacing: 8) {
+                Button("Back (Esc)") {
+                    service.stepBack()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+
+                if service.fairyAnswerStreaming {
+                    Button {
+                        service.stopFairyAsk()
+                    } label: {
+                        Label("Stop", systemImage: "stop.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                if !service.fairyAnswerText.isEmpty {
+                    Button {
+                        service.copyFairyAnswer()
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button {
+                        service.continueFairyInChat()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Continue in Chat")
+                            Image(systemName: "arrow.right")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Footer

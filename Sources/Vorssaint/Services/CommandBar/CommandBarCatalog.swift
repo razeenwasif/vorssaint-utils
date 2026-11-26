@@ -210,6 +210,122 @@ enum CommandBarCatalog {
         entries.append(contentsOf: linkEntries(
             CommandBarLinks.decode(UserDefaults.standard.data(forKey: DefaultsKey.commandBarLinks)),
             bar: bar))
+        entries.append(contentsOf: aiLauncherEntries())
+        return entries
+    }
+
+    private static func aiLauncherEntries() -> [CommandBarEntry] {
+        let subtitle = "AI Launcher"
+        var entries: [CommandBarEntry] = [
+            CommandBarEntry(
+                id: "action.aiLauncher",
+                title: "Open AI Launcher",
+                subtitle: subtitle,
+                keywords: "ai launcher claude codex gemini baryon",
+                icon: .symbol("sparkles.rectangle.stack"),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        NotchService.shared.open(.aiLauncher, pinned: true, takeFocus: true)
+                    }
+                }
+            ),
+            CommandBarEntry(
+                id: "action.aiTrio",
+                title: "Launch Research Trio",
+                subtitle: "Claude · ChatGPT Codex · Gemini",
+                keywords: "research trio ai launcher claude codex gemini",
+                icon: .symbol("sparkles"),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        AILauncherService.shared.launchResearchTrio()
+                    }
+                }
+            ),
+            CommandBarEntry(
+                id: "action.aiFolder",
+                title: "Set AI Terminal Folder",
+                subtitle: AILauncherService.shared.cliFolder.lastPathComponent,
+                keywords: "ai launcher folder ghostty terminal cli",
+                icon: .symbol("folder"),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        AILauncherService.shared.chooseFolder()
+                    }
+                }
+            ),
+            CommandBarEntry(
+                id: "action.relaySweep",
+                title: "Open Relay & Sweep",
+                subtitle: "Baryon Ops",
+                keywords: "relay sweep sync mini clean disk",
+                icon: .symbol("arrow.triangle.2.circlepath"),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        NotchService.shared.open(.relaySweep, pinned: true, takeFocus: true)
+                    }
+                }
+            ),
+            CommandBarEntry(
+                id: "action.relaySync",
+                title: "Relay: Sync Repos to Mini",
+                subtitle: "Baryon Ops",
+                keywords: "relay sync repos mac mini",
+                icon: .symbol("arrow.triangle.2.circlepath"),
+                run: { _ in
+                    BaryonBridgeService.shared.sendOpsCommand(target: "relay", action: "sync")
+                    QuickToolHUD.show(icon: "arrow.triangle.2.circlepath", message: "Relay Sync started")
+                }
+            ),
+            CommandBarEntry(
+                id: "action.sweepCleanSafe",
+                title: "Sweep: Clean Safe Caches",
+                subtitle: "Baryon Ops",
+                keywords: "sweep clean safe caches disk",
+                icon: .symbol("sparkles.square.filled.on.square"),
+                run: { _ in
+                    BaryonBridgeService.shared.sendOpsCommand(target: "sweep", action: "clean", tier: "safe")
+                    QuickToolHUD.show(icon: "sparkles.square.filled.on.square", message: "Sweep Clean (Safe) started")
+                }
+            ),
+            CommandBarEntry(
+                id: "action.shortcuts",
+                title: "Keyboard Shortcuts",
+                subtitle: "Dynamic Island",
+                keywords: "shortcuts cheat sheet hotkeys keys screenshot captures",
+                icon: .symbol("keyboard"),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        NotchService.shared.open(.shortcuts, pinned: true, takeFocus: true)
+                    }
+                }
+            ),
+            CommandBarEntry(
+                id: "action.tasks",
+                title: "Open Hadron Tasks",
+                subtitle: "Dynamic Island",
+                keywords: "tasks todos checklist hadron goal",
+                icon: .symbol("checklist"),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        NotchService.shared.open(.tasks, pinned: true, takeFocus: true)
+                    }
+                }
+            ),
+        ]
+        for tool in AILauncherService.tools where tool.isCLI {
+            entries.append(CommandBarEntry(
+                id: "action.aiCLI.\(tool.id)",
+                title: tool.name,
+                subtitle: "Ghostty · \(tool.subtitle) in \(AILauncherService.shared.cliFolder.lastPathComponent)",
+                keywords: "ai cli terminal ghostty \(tool.subtitle) \(tool.name)",
+                icon: .appIcon(path: tool.iconPath),
+                run: { _ in
+                    DispatchQueue.main.async {
+                        AILauncherService.shared.launch(tool)
+                    }
+                }
+            ))
+        }
         return entries
     }
 

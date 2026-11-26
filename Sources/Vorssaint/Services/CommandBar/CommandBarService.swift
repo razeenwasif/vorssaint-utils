@@ -35,6 +35,8 @@ final class CommandBarService: ObservableObject {
         /// Waiting for the person to press the combination they want for one
         /// row. Every other key is theirs while this lasts.
         case capturingShortcut(entryID: String)
+        /// Streaming an inline answer from Baryon's Fairy (`? prompt`).
+        case fairyAnswer(prompt: String)
 
         var isUninstallFlow: Bool {
             switch self {
@@ -74,6 +76,10 @@ final class CommandBarService: ObservableObject {
             uninstallFinderRequestID = nil
             if mode.isUninstallFlow {
                 AppUninstaller.shared.reset()
+                mode = .search
+            }
+            if case .fairyAnswer = mode {
+                stopFairyAsk()
                 mode = .search
             }
             // The argument field is temporary. Keep the completed search and
@@ -138,6 +144,11 @@ final class CommandBarService: ObservableObject {
     /// True while a file search or a saved script is still answering what
     /// was typed. The companion thinks meanwhile.
     @Published private(set) var awaitsAnswers = false
+
+    @Published private(set) var fairyAnswerText = ""
+    @Published private(set) var fairyAnswerError: String?
+    @Published private(set) var fairyAnswerStreaming = false
+    private var activeFairyAskID: String?
 
     /// The companion's face as the bar goes back into the island: a wink
     /// goodbye, or determined once something ran.
@@ -552,6 +563,7 @@ final class CommandBarService: ObservableObject {
 
     func hide() {
         stopClipboardSearch()
+        stopFairyAsk()
         micMuteChanges = nil
         // Cleared first, so the island closing under the bar does not close it again.
         let presented = presentation
@@ -958,6 +970,85 @@ final class CommandBarService: ObservableObject {
     func prefill(_ text: String) {
         if !isVisible { show() }
         query = text
+    }
+
+    // MARK: - Fairy inline streaming
+
+    func askFairyInBar(_ rawPrompt: String, context: [String: Any] = ["source": "commandBar"]) {
+        let prompt = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        stopFairyAsk()
+        savedQuery = query
+        mode = .fairyAnswer(prompt: prompt)
+        fairyAnswerText = ""
+        fairyAnswerError = nil
+        fairyAnswerStreaming = true
+        awaitsAnswers = true
+        refreshPanelLayout()
+
+        var requestID = ""
+        requestID = BaryonBridgeService.shared.askFairy(
+            text: prompt,
+            context: context,
+            onText: { [weak self] text in
+                guard let self, self.activeFairyAskID == requestID else { return }
+                self.fairyAnswerText = text
+                self.refreshPanelLayout()
+            },
+            onDone: { [weak self] result in
+                guard let self, self.activeFairyAskID == requestID else { return }
+                self.activeFairyAskID = nil
+                self.fairyAnswerStreaming = false
+                self.awaitsAnswers = self.fileSearch.isAwaiting || self.scriptRunner.isAwaiting
+                switch result {
+                case .success(let finalText):
+                    if !finalText.isEmpty {
+                        self.fairyAnswerText = finalText
+                    }
+                case .failure(let error):
+                    self.fairyAnswerError = error.localizedDescription
+                }
+                self.refreshPanelLayout()
+            }
+        )
+        activeFairyAskID = requestID
+    }
+
+    func showFairyAnswer(prompt: String, context: [String: Any] = ["source": "radial"]) {
+        if !isVisible { show() }
+        DispatchQueue.main.async { [weak self] in
+            self?.askFairyInBar(prompt, context: context)
+        }
+    }
+
+    func stopFairyAsk() {
+        guard let requestID = activeFairyAskID else {
+            fairyAnswerStreaming = false
+            return
+        }
+        activeFairyAskID = nil
+        fairyAnswerStreaming = false
+        awaitsAnswers = fileSearch.isAwaiting || scriptRunner.isAwaiting
+        BaryonBridgeService.shared.stopAsk(id: requestID)
+        refreshPanelLayout()
+    }
+
+    func copyFairyAnswer() {
+        let text = fairyAnswerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        QuickToolHUD.show(icon: "doc.on.doc", message: "Copied")
+    }
+
+    func continueFairyInChat() {
+        let text = fairyAnswerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        BaryonBridgeService.shared.sendContextAction(action: "openChat", text: text, source: "commandBar")
+        hide()
     }
 
     /// The chip order. Fixed, so the row never reshuffles under a pointer.
@@ -1591,10 +1682,10 @@ final class CommandBarService: ObservableObject {
                                                       hasCategory: activeCategory != nil,
                                                       isPeeking: isPeekingHome))
         case .argument, .confirm, .uninstallReview, .uninstallHomebrewConfirm, .actions, .naming,
-             .capturingShortcut:
+             .capturingShortcut, .fairyAnswer:
             setCompactHome(false)
         }
-        let awaiting = fileSearch.isAwaiting || scriptRunner.isAwaiting
+        let awaiting = fileSearch.isAwaiting || scriptRunner.isAwaiting || fairyAnswerStreaming
         if awaitsAnswers != awaiting { awaitsAnswers = awaiting }
         refreshPanelLayout()
     }
@@ -1796,6 +1887,24 @@ final class CommandBarService: ObservableObject {
 
     private func searchRows(for trimmed: String) -> [CommandBarEntry] {
         let bar = FeatureStrings.commandBar(L10n.shared.language)
+        if activeCategory == nil, trimmed.hasPrefix("?") {
+            scriptRunner.cancelPending()
+            fileSearch.cancelPending()
+            let question = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)
+            return [CommandBarEntry(
+                id: "fairy.ask.inline",
+                title: question.isEmpty ? "Ask Fairy…" : "Ask Fairy",
+                subtitle: question.isEmpty ? "Type a question after ? and press Return" : question,
+                icon: .symbol("sparkles"),
+                countsUsage: false,
+                matchTitle: trimmed,
+                keepsBarOpen: true,
+                takesArgument: true,
+                run: { [weak self] _ in
+                    self?.askFairyInBar(question)
+                }
+            )]
+        }
         // Inside a category, typing filters that category and nothing else:
         // no answer row, no caps per kind, just the ranking over one list.
         if let category = activeCategory {
@@ -2060,6 +2169,19 @@ final class CommandBarService: ObservableObject {
             result.insert(colorPreview, at: CommandBarSearch.colorPreviewIndex(
                 rowTitles: result.map(\.title), query: trimmed))
             if result.count > 12 { result.removeLast() }
+        }
+        if result.isEmpty, activeCategory == nil, !trimmed.isEmpty {
+            result.append(CommandBarEntry(
+                id: "fairy.ask.fallback",
+                title: "Ask Fairy",
+                subtitle: trimmed,
+                icon: .symbol("sparkles"),
+                countsUsage: false,
+                keepsBarOpen: true,
+                run: { [weak self] _ in
+                    self?.askFairyInBar(trimmed)
+                }
+            ))
         }
         return result
     }
@@ -2709,6 +2831,13 @@ final class CommandBarService: ObservableObject {
         case .capturingShortcut:
             // Return is a combination like any other while listening.
             return
+        case .fairyAnswer:
+            if fairyAnswerStreaming {
+                stopFairyAsk()
+            } else if !fairyAnswerText.isEmpty {
+                continueFairyInChat()
+            }
+            return
         case .confirm(let id):
             guard let entry = entry(withID: id) else { return }
             finish(entry, value: nil)
@@ -2844,6 +2973,11 @@ final class CommandBarService: ObservableObject {
             // it came from, not all the way home.
             mode = .uninstallReview(entryID: id)
             refreshPanelLayout()
+        case .fairyAnswer:
+            stopFairyAsk()
+            mode = .search
+            query = savedQuery
+            refreshResults()
         case .search:
             // A long query typed by mistake should be clearable without
             // throwing the whole session away; then Esc leaves the category,

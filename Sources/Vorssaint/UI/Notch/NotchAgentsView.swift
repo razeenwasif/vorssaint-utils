@@ -8,6 +8,7 @@ struct NotchAgentsView: View {
     let size: CGSize
     @ObservedObject private var usage = AgentUsageService.shared
     @ObservedObject private var accounts = CodexProfileLimitsService.shared
+    @ObservedObject private var baryon = BaryonBridgeService.shared
     @ObservedObject private var l10n = L10n.shared
     @Environment(\.notchSettingsPreview) private var preview
     @AppStorage(DefaultsKey.notchAgentsPeriod) private var period = AgentPeriod.today.rawValue
@@ -74,6 +75,10 @@ struct NotchAgentsView: View {
                 // top row, beside the camera, while any of them shows.
                 .notchBand(leading: {
                     if rows.joined().contains(where: { $0.card.followsPeriod }) { periodMenu }
+                }, trailing: {
+                    if let summary = baryon.baryonUsage {
+                        baryonUsageStrip(summary)
+                    }
                 })
             }
         }
@@ -87,6 +92,25 @@ struct NotchAgentsView: View {
             guard !preview else { return }
             usage.pageDidDisappear()
             accounts.pageDidDisappear()
+        }
+    }
+
+    private func baryonUsageStrip(_ summary: BaryonUsageSummary) -> some View {
+        HStack(spacing: 5) {
+            if summary.todayCostUsd > 0 {
+                Text(String(format: "$%.2f", summary.todayCostUsd))
+                    .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(StratusTheme.orange)
+            }
+            ForEach(summary.providers.prefix(3)) { provider in
+                Text("\(provider.name) \(provider.percentUsed)%")
+                    .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                    .foregroundStyle(provider.percentUsed >= 85 ? StratusTheme.orange : StratusTheme.cyan)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(StratusTheme.cardBg, in: Capsule())
+                    .overlay(Capsule().strokeBorder(StratusTheme.hairline, lineWidth: 0.5))
+            }
         }
     }
 

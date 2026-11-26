@@ -18,7 +18,7 @@ struct NotchMascotSettings: View {
     @AppStorage(DefaultsKey.notchMascotVisits) private var visits = true
     @AppStorage(DefaultsKey.notchMascotReactions) private var reactions = true
     @AppStorage(DefaultsKey.notchMascotHidesWhenIdle) private var hidesWhenIdle = true
-    @AppStorage(DefaultsKey.notchMascotStyle) private var style = NotchMascotStyle.minimal.rawValue
+    @AppStorage(DefaultsKey.notchMascotStyle) private var style = NotchMascotStyle.fairy.rawValue
     @AppStorage(DefaultsKey.notchMascotShape) private var shape = NotchMascotShape.ball.rawValue
     @AppStorage(DefaultsKey.notchMascotPalette) private var palette = NotchMascotPalette.pearl.rawValue
     @AppStorage(DefaultsKey.notchMascotSide) private var side = NotchMascotSide.left.rawValue
@@ -31,7 +31,7 @@ struct NotchMascotSettings: View {
     private var editor: NotchEditorStrings { FeatureStrings.notchEditor(l10n.language) }
 
     private var look: NotchMascotLook {
-        NotchMascotLook(style: NotchMascotStyle(rawValue: style) ?? .minimal,
+        NotchMascotLook(style: NotchMascotStyle(rawValue: style) ?? .fairy,
                         shape: NotchMascotShape(rawValue: shape) ?? .ball,
                         palette: NotchMascotPalette(rawValue: palette) ?? .pearl)
     }
@@ -106,7 +106,7 @@ struct NotchMascotSettings: View {
             }
         }
         .padding(12)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .modifier(StratusCardSurface(cornerRadius: 14))
     }
 
     // MARK: Appearance
@@ -136,10 +136,12 @@ struct NotchMascotSettings: View {
                 shapes
                     .transition(.opacity)
             }
-            SettingsRow(symbol: "swatchpalette", title: text.color) {
-                Text(text.palette(look.palette)).foregroundStyle(.secondary)
+            if look.style != .fairy {
+                SettingsRow(symbol: "swatchpalette", title: text.color) {
+                    Text(text.palette(look.palette)).foregroundStyle(.secondary)
+                }
+                swatches
             }
-            swatches
         }
         .animation(animation, value: look.style)
     }
@@ -337,7 +339,7 @@ private struct NotchMascotStageCard: View {
                 .opacity(awake ? 1 : 0.45)
         }
         .padding(16)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .modifier(StratusCardSurface(cornerRadius: 14))
         .onChange(of: awake) { _, awake in
             // A moment still playing ends; switched on, it wakes up with a
             // stretch, and off, it yawns and dozes off. Hidden a moment ago

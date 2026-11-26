@@ -181,7 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         if AppFeature.monitorPower.isAvailable, PowerSampler.hasInternalBattery {
             MaxCapacityProbe.shared.refreshIfStale()
         }
-        UpdateService.shared.startAutomaticChecks()
+        if !BaryonHelperMode.isEnabled {
+            UpdateService.shared.startAutomaticChecks()
+        }
+        BaryonBridgeService.shared.start()
         NotificationCenter.default.addObserver(self, selector: #selector(appBecameActive),
                                                name: NSApplication.didBecomeActiveNotification, object: nil)
 
@@ -253,9 +256,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             }
             #endif
             if !defaults.bool(forKey: DefaultsKey.hasOnboarded) {
-                guard !skipStartupWindows else { return }
+                guard !skipStartupWindows, !BaryonHelperMode.isEnabled else { return }
                 self.showOnboarding(mode: .full)
-            } else {
+            } else if !BaryonHelperMode.isEnabled {
                 // Keep the last seen version marker current. An update is
                 // queued for the What's New window first, so a start that
                 // goes wrong before the window opens still shows it next time.
@@ -325,6 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
+        BaryonBridgeService.shared.stop()
         CommandBarService.shared.restoreBorrowedInputSource()
         if AppFeature.notch.isAvailable { NotchService.shared.stop(restoreCapture: false) }
         // Quitting properly means the start worked, whenever it happened.
@@ -1881,7 +1885,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             let window = SettingsWindow(contentViewController: host)
             window.isMouseButtonCaptureActive = { MouseButtonShortcutService.isCaptureActive }
             // .miniaturizable so the Window menu's Minimize (Cmd+M) actually works.
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.backgroundColor = StratusTheme.nsCanvas
+            window.titlebarAppearsTransparent = true
+            window.isOpaque = true
             host.view.widthAnchor.constraint(greaterThanOrEqualToConstant: SettingsWindowSupport.minContentWidth).isActive = true
             host.view.heightAnchor.constraint(greaterThanOrEqualToConstant: SettingsWindowSupport.minContentHeight).isActive = true
             let minFrame = window.frameRect(forContentRect: NSRect(

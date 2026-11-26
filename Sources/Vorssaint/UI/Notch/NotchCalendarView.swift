@@ -24,7 +24,7 @@ struct NotchCalendarView: View {
 
     var body: some View {
         Group {
-            if permissions.calendarAccess == .fullAccess {
+            if permissions.calendarAccess == .fullAccess || calendar.hasGoogleCalendar {
                 TimelineView(.everyMinute) { context in
                     Group {
                         if showsMonth {
@@ -165,7 +165,13 @@ struct NotchCalendarView: View {
                 }
             }
             if rowOpensCalendar {
-                NotchIconButton(symbol: "arrow.up.forward.app", title: text.openCalendar) { openCalendar() }
+                HStack(spacing: 2) {
+                    NotchIconButton(symbol: "arrow.clockwise", title: "Refresh") {
+                        calendar.refresh()
+                        BaryonBridgeService.shared.requestCalendarEvents()
+                    }
+                    NotchIconButton(symbol: "arrow.up.forward.app", title: text.openCalendar) { openCalendar() }
+                }
             }
         }
     }
@@ -337,6 +343,25 @@ struct NotchCalendarView: View {
     /// Calendar itself gets the link: another app claiming the `ical` scheme
     /// would not know EventKit's identifiers.
     private func openCalendar(showing event: NotchCalendarEvent? = nil) {
+        if let event, event.source == "google" {
+            if let join = event.joinURL, let url = URL(string: join) {
+                NSWorkspace.shared.open(url)
+                return
+            }
+            if let web = event.webURL, let url = URL(string: web) {
+                NSWorkspace.shared.open(url)
+                return
+            }
+            if let fallback = URL(string: "https://calendar.google.com") {
+                NSWorkspace.shared.open(fallback)
+                return
+            }
+        }
+        if event == nil, permissions.calendarAccess != .fullAccess, calendar.hasGoogleCalendar,
+           let fallback = URL(string: "https://calendar.google.com") {
+            NSWorkspace.shared.open(fallback)
+            return
+        }
         guard let application = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") else { return }
         let configuration = NSWorkspace.OpenConfiguration()
         if let url = event.flatMap({ NotchCalendarSupport.eventURL($0) }) {
@@ -429,6 +454,24 @@ private struct NotchCalendarEventRow: View {
             if !event.location.isEmpty {
                 Label(event.location, systemImage: "mappin")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+            }
+            if let join = event.joinURL, !join.isEmpty, let joinURL = URL(string: join) {
+                Button {
+                    NSWorkspace.shared.open(joinURL)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 9.5, weight: .semibold))
+                        Text("Join meeting")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3.5)
+                    .background(Color.accentColor.opacity(0.85), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

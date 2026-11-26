@@ -196,6 +196,7 @@ struct NotchFilesView: View {
 
     private var shelfActions: some View {
         HStack(spacing: 6) {
+            fairyMenu
             if AppFeature.mediaTools.isAvailable {
                 NotchIconButton(symbol: "wand.and.stars", title: l10n.s.mediaName) {
                     actionInputs = shelf.fileURLsForActions()
@@ -221,6 +222,59 @@ struct NotchFilesView: View {
                 .disabled(archives.isRunning)
             }
         }
+    }
+
+    private var fairyMenu: some View {
+        Menu {
+            Button {
+                sendShelfToFairy(action: "ask", hudMessage: "Asked Fairy")
+            } label: {
+                Label("Ask Fairy", systemImage: "sparkles")
+            }
+            Button {
+                sendShelfToFairy(action: "notebook", hudMessage: "Sent to Notebook")
+            } label: {
+                Label("Add to Notebook", systemImage: "book.closed")
+            }
+            Button {
+                sendShelfToFairy(action: "goal", hudMessage: "Sent as Goal")
+            } label: {
+                Label("Turn into Goal", systemImage: "target")
+            }
+            Button {
+                sendShelfToFairy(action: "attach", hudMessage: "Attached to Chat")
+            } label: {
+                Label("Attach to Chat", systemImage: "paperclip")
+            }
+        } label: {
+            Image(systemName: "sparkles")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.0))
+                .frame(width: 28, height: 28)
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(!shelf.hasFilesForActions)
+        .help("Send Shelf items to Fairy")
+        .accessibilityLabel("Ask Fairy")
+    }
+
+    private func sendShelfToFairy(action: String, hudMessage: String) {
+        let urls = shelf.fileURLsForActions()
+        guard !urls.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let summary = urls.map(\.lastPathComponent).joined(separator: ", ")
+        BaryonBridgeService.shared.sendContextAction(
+            action: action,
+            text: summary,
+            files: urls.map(\.path),
+            source: "shelf"
+        )
+        QuickToolHUD.show(icon: "sparkles", message: hudMessage)
     }
 
     /// The count alone where the whole status would be cut beside the camera.

@@ -1863,6 +1863,26 @@ final class ScreenshotEditorController: NSObject, NSWindowDelegate {
         model.markExported()
     }
 
+    /// Exports the annotated screenshot to a temporary PNG and sends it with any recognized OCR text to Fairy.
+    func askFairy() {
+        guard let url = shareFile() else {
+            NSSound.beep()
+            return
+        }
+        let ocrText = model.textWords.map(\.text).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        BaryonBridgeService.shared.sendContextAction(
+            action: "screenshot",
+            text: ocrText,
+            files: [url.path],
+            imagePath: url.path,
+            source: "screenshot"
+        )
+        model.markExported()
+        QuickToolHUD.show(icon: "sparkles", message: "Sent to Fairy")
+        window?.close()
+    }
+
     /// Copies the words selected on the canvas as plain text.
     func copySelectedText() {
         let text = model.selectedText
